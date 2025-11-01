@@ -1,0 +1,40 @@
+{
+    "folders": [
+        {
+            "path": "."
+        }
+    ],
+    "settings": {
+        // Usa il tuo virtual environment
+        "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+
+        // Formattazione e linting
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        },
+        "python.formatting.provider": "black",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": true,
+
+        // Evita di indicizzare la cartella venv
+        "files.exclude": {
+            "**/__pycache__": true,
+            "**/.venv": true
+        },
+
+        // Impostazioni Git
+        "git.autofetch": true,
+        "git.confirmSync": false
+    },
+    "extensions": {
+        "recommendations": [
+            "ms-python.python",
+            "ms-python.black-formatter",
+            "ms-toolsai.jupyter",
+            "mhutchie.git-graph",
+            "ms-vscode.gitlens",
+            "ms-vscode-remote.remote-wsl"
+        ]
+    }
+}
