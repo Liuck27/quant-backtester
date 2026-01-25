@@ -64,9 +64,13 @@ class BacktestEngine:
         # Store event for verification and logging
         self.processed_events.append(event)
         
-        # 1. MarketEvent -> Strategy
+        # 1. MarketEvent -> Strategy & Portfolio
         if isinstance(event, MarketEvent):
             self.latest_prices[event.symbol] = event.price # Keep track of price for execution
+            
+            # Update Portfolio with latest price (Mark to Market)
+            if self.portfolio:
+                self.portfolio.update_market_event(event)
             
             if self.strategy:
                 signal = self.strategy.calculate_signals(event)
