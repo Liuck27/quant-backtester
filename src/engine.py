@@ -1,18 +1,22 @@
 from collections import deque
 from typing import Optional
-from src.events import Event, MarketEvent
+from src.events import Event, MarketEvent, SignalEvent, OrderEvent, FillEvent
 
 class BacktestEngine:
     """
     The core event-driven execution engine.
     It manages the event queue and dispatches events to the appropriate components.
     """
-    def __init__(self, data_handler=None, strategy=None):
+    def __init__(self, data_handler=None, strategy=None, portfolio=None):
         self.queue = deque()
         self.data_handler = data_handler
         self.strategy = strategy
+        self.portfolio = portfolio
         self.is_running = False
         self.processed_events = [] # Store processed events for State Verification
+        
+        # In a real system, we'd have a separate ExecutionHandler
+        self.latest_prices = {} 
 
     def put(self, event: Event):
         """
@@ -60,9 +64,38 @@ class BacktestEngine:
         # Store event for verification and logging
         self.processed_events.append(event)
         
-        # Dispatch to Strategy
+        # 1. MarketEvent -> Strategy
         if isinstance(event, MarketEvent):
+            self.latest_prices[event.symbol] = event.price # Keep track of price for execution
+            
             if self.strategy:
                 signal = self.strategy.calculate_signals(event)
                 if signal:
                     self.queue.append(signal)
+
+        # 2. SignalEvent -> Portfolio -> OrderEvent
+        elif isinstance(event, SignalEvent):
+            if self.portfolio:
+                order = self.portfolio.create_order(event)
+                if order:
+                    self.queue.append(order)
+
+        # 3. OrderEvent -> Simulated Execution -> FillEvent
+        elif isinstance(event, OrderEvent):
+            # Simplified Execution: Fill immediately at latest known price
+            # In a real system, this would go to ExecutionHandler
+            fill_price = self.latest_prices.get(event.symbol, 0.0) 
+            if fill_price > 0:
+                fill = FillEvent(
+                    time=event.time,
+                    symbol=event.symbol,
+                    quantity=event.quantity,
+                    price=fill_price,
+                    direction=event.direction
+                )
+                self.queue.append(fill)
+
+        # 4. FillEvent -> Portfolio (Update holdings)
+        elif isinstance(event, FillEvent):
+            if self.portfolio:
+                self.portfolio.update_fill(event)

@@ -28,3 +28,26 @@ class SignalEvent(Event):
     symbol: str
     signal_type: str  # 'LONG', 'SHORT', 'EXIT'
     strength: float = 1.0
+
+@dataclass
+class OrderEvent(Event):
+    """
+    Event representing an order to be executed.
+    """
+    time: datetime
+    symbol: str
+    order_type: str # 'MKT', 'LMT'
+    quantity: int
+    direction: str # 'BUY', 'SELL'
+
+@dataclass
+class FillEvent(Event):
+    """
+    Event representing a filled order (execution).
+    """
+    time: datetime
+    symbol: str
+    quantity: int
+    price: float
+    commission: float = 0.0
+    direction: str = 'BUY' # 'BUY', 'SELL'
