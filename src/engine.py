@@ -1,15 +1,16 @@
 from collections import deque
 from typing import Optional
-from src.events import Event
+from src.events import Event, MarketEvent
 
 class BacktestEngine:
     """
     The core event-driven execution engine.
     It manages the event queue and dispatches events to the appropriate components.
     """
-    def __init__(self, data_handler=None):
+    def __init__(self, data_handler=None, strategy=None):
         self.queue = deque()
         self.data_handler = data_handler
+        self.strategy = strategy
         self.is_running = False
         self.processed_events = [] # Store processed events for State Verification
 
@@ -58,3 +59,10 @@ class BacktestEngine:
         """
         # Store event for verification and logging
         self.processed_events.append(event)
+        
+        # Dispatch to Strategy
+        if isinstance(event, MarketEvent):
+            if self.strategy:
+                signal = self.strategy.calculate_signals(event)
+                if signal:
+                    self.queue.append(signal)
