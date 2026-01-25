@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quant-backtester"
+version = "0.1.0"
+description = "An event-driven quantitative backtesting engine"
+authors = [
+    {name = "Luca"}
+]
+dependencies = [
+    "pandas",
+    "pytest",
+    "ipykernel",
+    "yfinance"
+]
+requires-python = ">=3.9"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
