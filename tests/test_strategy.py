@@ -3,7 +3,8 @@ import tempfile
 import os
 from src.engine import BacktestEngine
 from src.data_handler import DataHandler
-from src.strategy import BuyAndHoldStrategy
+from src.strategy import BuyAndHoldStrategy, MovingAverageCrossStrategy
+from datetime import datetime
 from src.events import MarketEvent, SignalEvent
 
 class TestStrategyIntegration:
@@ -56,3 +57,94 @@ class TestStrategyIntegration:
             
         finally:
             os.remove(tmp_path)
+
+class TestMovingAverageStrategy:
+    def test_warmup_period(self):
+        """Verify no signals during warm-up period."""
+        strategy = MovingAverageCrossStrategy(short_window=2, long_window=4)
+        
+        # Feed 3 events (one less than long_window)
+        prices = [10.0, 11.0, 12.0]
+        for p in prices:
+            event = MarketEvent(datetime.now(), "TEST", p, 100)
+            signal = strategy.calculate_signals(event)
+            assert signal is None
+
+    def test_golden_cross_long(self):
+        """Verify LONG signal on Golden Cross."""
+        strategy = MovingAverageCrossStrategy(short_window=2, long_window=4)
+        
+        # Prices:
+        # 1. 10.0 -> History: [10]. Wait.
+        # 2. 10.0 -> History: [10, 10]. Short: 10, Wait.
+        # 3. 10.0 -> History: [10, 10, 10]. Short: 10, Wait.
+        # 4. 10.0 -> History: [10, 10, 10, 10]. Short: 10, Long: 10. No Signal.
+        # 5. 11.0 -> History: [10, 10, 10, 11]. 
+        #    Short (last 2): (10+11)/2 = 10.5
+        #    Long (last 4): (10+10+10+11)/4 = 10.25
+        #    Short > Long -> LONG
+        
+        prices = [10.0, 10.0, 10.0, 10.0]
+        for p in prices:
+            event = MarketEvent(datetime.now(), "TEST", p, 100)
+            strategy.calculate_signals(event)
+            
+        # Trigger crossover
+        event = MarketEvent(datetime.now(), "TEST", 11.0, 100)
+        signal = strategy.calculate_signals(event)
+        
+        assert signal is not None
+        assert signal.signal_type == "LONG"
+        assert strategy.bought is True
+
+    def test_death_cross_exit(self):
+        """Verify EXIT signal on Death Cross."""
+        strategy = MovingAverageCrossStrategy(short_window=2, long_window=4)
+        strategy.bought = True # Manually set state to bought to test exit
+        
+        # Prices set up such that Short is currently > Long (consistent with bought),
+        # but about to cross down.
+        # Let's just force history so next price triggers drop.
+        
+        # History: [12, 12, 12, 12]
+        # Short (2): 12. Long (4): 12. 
+        # (Technically we need Short > Long to have entered naturally, but we force bought=True for unit test isolation)
+        
+        strategy.prices = [12.0, 12.0, 12.0, 12.0] 
+        
+        # Trigger drop
+        # New Price: 10.0
+        # History: [..., 12, 12, 12, 10]
+        # Short (2): (12+10)/2 = 11.0
+        # Long (4): (12+12+12+10)/4 = 11.5
+        # Short < Long -> EXIT
+        
+        event = MarketEvent(datetime.now(), "TEST", 10.0, 100)
+        signal = strategy.calculate_signals(event)
+        
+        assert signal is not None
+        assert signal.signal_type == "EXIT"
+        assert strategy.bought is False
+        
+    def test_no_repeat_signal(self):
+        """Verify no repeated signals if trend continues."""
+        strategy = MovingAverageCrossStrategy(short_window=2, long_window=4)
+        
+        # Establish LONG position
+        # [10, 10, 10, 11] -> 10.5 vs 10.25 -> LONG
+        strategy.prices = [10.0, 10.0, 10.0]
+        strategy.calculate_signals(MarketEvent(datetime.now(), "TEST", 11.0, 100))
+        assert strategy.bought is True
+        
+        # Continue trend
+        # Next: 12.0
+        # History: [..., 10, 10, 11, 12]
+        # Short (2): 11.5
+        # Long (4): (10+10+11+12)/4 = 10.75
+        # Short > Long. Still bought. Should be None.
+        
+        event = MarketEvent(datetime.now(), "TEST", 12.0, 100)
+        signal = strategy.calculate_signals(event)
+        
+        assert signal is None
+        assert strategy.bought is True

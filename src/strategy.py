@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, List
+from collections import deque
 from src.events import MarketEvent, SignalEvent
 
 class Strategy(ABC):
@@ -40,4 +41,64 @@ class BuyAndHoldStrategy(Strategy):
                 symbol=event.symbol,
                 signal_type="LONG"
             )
+        return None
+
+class MovingAverageCrossStrategy(Strategy):
+    """
+    Stateful strategy using Simple Moving Average (SMA) Crossover.
+    
+    Logic:
+    - LONG (Golden Cross): Short SMA crosses above Long SMA.
+    - EXIT (Death Cross): Short SMA crosses below Long SMA.
+    
+    Note:
+    - Currently implements LONG/EXIT only (no shorting).
+    - Can be extended to LONG/SHORT reversal system in the future.
+    """
+    def __init__(self, short_window: int = 10, long_window: int = 30):
+        self.short_window = short_window
+        self.long_window = long_window
+        self.prices: List[float] = [] # History of closing prices
+        self.bought = False
+        
+    def calculate_signals(self, event: MarketEvent) -> Optional[SignalEvent]:
+        if not isinstance(event, MarketEvent):
+            return None
+            
+        # Update history
+        self.prices.append(event.price)
+        
+        # Warm-up period
+        if len(self.prices) < self.long_window:
+            return None
+            
+        # Calculate SMAs
+        # We need the last 'window' prices
+        short_prices = self.prices[-self.short_window:]
+        long_prices = self.prices[-self.long_window:]
+        
+        short_sma = sum(short_prices) / self.short_window
+        long_sma = sum(long_prices) / self.long_window
+        
+        # Generate Signals
+        signal_type = None
+        
+        # Golden Cross: Short > Long (and we are flat)
+        if short_sma > long_sma and not self.bought:
+            self.bought = True
+            signal_type = "LONG"
+            
+        # Death Cross: Short < Long (and we are Long)
+        elif short_sma < long_sma and self.bought:
+            self.bought = False
+            signal_type = "EXIT"
+            
+        if signal_type:
+            return SignalEvent(
+                time=event.time,
+                symbol=event.symbol,
+                signal_type=signal_type,
+                strength=1.0 # Default strength
+            )
+            
         return None
