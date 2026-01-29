@@ -10,9 +10,10 @@ The system follows a strict **Event-Driven Architecture**, preferred in institut
 ### Core Components
 1.  **Event Loop (`BacktestEngine`)**: The central nervous system. A FIFO queue consuming events sequentially.
 2.  **Data Feed (`DataHandler`)**: Drip-feeds historical data (`MarketEvent`) to simulate a live market.
-3.  **Strategy**: Receives `MarketEvent` and decides whether to generate a `SignalEvent`.
+3.  **Strategy**: Receives `MarketEvent` and decides whether to generate a `SignalEvent`. Now supports stateful strategies like **Moving Average Crossover**.
 4.  **Portfolio**: Manages Cash & Holdings. Receives `SignalEvent` -> Generates `OrderEvent`. Updates state on `FillEvent`.
-5.  **Performance**: Calculates Equity Curve, Sharpe Ratio, and Drawdowns (Mark-to-Market).
+5.  **Research (`StrategyResearchRunner`)**: Orchestrates multiple backtests for parameter optimization and strategy sensitivity analysis.
+6.  **Visualization**: Integrated plotting utilities for Equity Curves, Drawdown profiles, and Optimization Heatmaps.
 
 ### Event Flow
 ```mermaid
@@ -39,28 +40,32 @@ Clone the repository and install in editable mode:
 pip install -e .
 ```
 
-### Running the Demo
-A comprehensive demo notebook is available to visualize the backtest results.
+### Running Strategy Research
+We've added a robust research layer to test strategy parameters at scale.
 1.  Activate your environment.
-2.  Open `notebook_demo.ipynb` in VS Code or Jupyter Lab.
-3.  Select the **"Python (quant-backtester)"** kernel.
-4.  Run All Cells.
+2.  Open `notebooks/research_ma_crossover.ipynb` in VS Code or Jupyter Lab.
+3.  Run the cells to see a **Moving Average Crossover** parameter sweep with interactive heatmaps.
 
 ### Running Tests
-Unit tests use `pytest`:
+Unit and integration tests use `pytest`:
 ```bash
 pytest tests/
 ```
 
 ## 📊 Project Status
-**Phase 1 (Python)**: ✅ Completed
+**Phase 1 (Python Core)**: ✅ Completed
 - [x] Event Loop Skeleton
 - [x] Data Ingestion (CSV)
-- [x] Naive Strategy Implementation (Buy & Hold)
 - [x] Portfolio Management (Cash/Holdings)
 - [x] Performance Metrics (Sharpe, Drawdown)
 
-**Phase 2 (C++)**: 🚧 Planned
+**Phase 2 (Research & Visualization)**: ✅ Completed
+- [x] Stateful Strategy Support (MA Crossover)
+- [x] Parameter Sweep Runner
+- [x] Visualization Layer (Matplotlib/Seaborn)
+- [x] Integration Testing for Research Workflow
+
+**Phase 3 (Optimization/C++)**: 🚧 Planned
 - [ ] Migrate `Strategy` calculation to C++
 - [ ] Bind using `pybind11` for high-performance backtesting.
 
