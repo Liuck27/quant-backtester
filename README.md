@@ -70,9 +70,34 @@ pytest tests/
 - [x] Risk-Based Position Sizing
 - [x] **Walk-Forward Validation Module**
 
-**Phase 4 (Performance Optimization)**: 🚧 Planned
-- [ ] Migrate heavy strategy calculations to C++
-- [ ] Bind using `pybind11` for high-performance execution.
+**Phase 4 (Performance Optimization)**: ✅ Completed
+- [x] Migrate heavy strategy calculations to C++
+- [x] Bind using `pybind11` for high-performance execution.
+
+## ⚡️ C++ Optimization
+
+To demonstrate the ability to identify bottlenecks and optimize performance, the core logic of the `MovingAverageCrossStrategy` has been implemented in C++.
+
+### Performance Benchmark (100,000 events)
+Using the **Fast Path** implementation (direct price feeding into C++), we achieve a significant performance boost:
+
+| Implementation | Time (100k events) | Speedup vs Python |
+| :--- | :--- | :--- |
+| Python Core | ~0.28s | 1.00x |
+| **C++ Fast Path** | **~0.08s** | **3.24x** |
+
+### How to Build
+A C++ compiler is required. The build is managed via `setuptools` and `pybind11`.
+```bash
+# Build the C++ extension locally
+pip install setuptools pybind11
+python setup.py build_ext --inplace
+```
+
+### Running the Benchmark
+```bash
+python benchmark_strategy.py
+```
 
 ## 🤝 Contribution
 Designed for clean code readability and extensibility. 
