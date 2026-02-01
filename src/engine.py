@@ -1,27 +1,34 @@
+import logging
 from collections import deque
 from typing import Optional
 from src.events import Event, MarketEvent, SignalEvent, OrderEvent, FillEvent
+from src.config import setup_logging
+
+logger = logging.getLogger(__name__)
+
 
 class BacktestEngine:
     """
     The core event-driven execution engine.
     It manages the event queue and dispatches events to the appropriate components.
     """
+
     def __init__(self, data_handler=None, strategy=None, portfolio=None):
+        setup_logging()
         self.queue = deque()
         self.data_handler = data_handler
         self.strategy = strategy
         self.portfolio = portfolio
         self.is_running = False
-        self.processed_events = [] # Store processed events for State Verification
-        
+        self.processed_events = []  # Store processed events for State Verification
+
         # In a real system, we'd have a separate ExecutionHandler
-        self.latest_prices = {} 
+        self.latest_prices = {}
 
     def put(self, event: Event):
         """
         Puts an event into the queue.
-        
+
         Args:
             event (Event): The event to add to the queue.
         """
@@ -29,12 +36,12 @@ class BacktestEngine:
 
     def run(self):
         """
-        Main execution loop. 
+        Main execution loop.
         Loops while there is still data in the handler or events in the queue.
         """
         self.is_running = True
-        print("Starting Backtest Engine...")
-        
+        logger.info("Starting Backtest Engine...")
+
         while True:
             # 1. Update Data (if queue is empty, get more data)
             if len(self.queue) == 0:
@@ -46,8 +53,8 @@ class BacktestEngine:
                     # Data finished and queue empty
                     break
                 elif not self.data_handler and len(self.queue) == 0:
-                     # No data handler and empty queue
-                     break
+                    # No data handler and empty queue
+                    break
 
             # 2. Process Queue
             if len(self.queue) > 0:
@@ -55,7 +62,7 @@ class BacktestEngine:
                 self._process_event(event)
 
         self.is_running = False
-        print("Backtest Engine stopped.")
+        logger.info("Backtest Engine stopped.")
 
     def _process_event(self, event: Event):
         """
@@ -63,15 +70,17 @@ class BacktestEngine:
         """
         # Store event for verification and logging
         self.processed_events.append(event)
-        
+
         # 1. MarketEvent -> Strategy & Portfolio
         if isinstance(event, MarketEvent):
-            self.latest_prices[event.symbol] = event.price # Keep track of price for execution
-            
+            self.latest_prices[event.symbol] = (
+                event.price
+            )  # Keep track of price for execution
+
             # Update Portfolio with latest price (Mark to Market)
             if self.portfolio:
                 self.portfolio.update_market_event(event)
-            
+
             if self.strategy:
                 signal = self.strategy.calculate_signals(event)
                 if signal:
@@ -88,14 +97,14 @@ class BacktestEngine:
         elif isinstance(event, OrderEvent):
             # Simplified Execution: Fill immediately at latest known price
             # In a real system, this would go to ExecutionHandler
-            fill_price = self.latest_prices.get(event.symbol, 0.0) 
+            fill_price = self.latest_prices.get(event.symbol, 0.0)
             if fill_price > 0:
                 fill = FillEvent(
                     time=event.time,
                     symbol=event.symbol,
                     quantity=event.quantity,
                     price=fill_price,
-                    direction=event.direction
+                    direction=event.direction,
                 )
                 self.queue.append(fill)
 

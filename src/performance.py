@@ -2,28 +2,30 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List
 
+
 def create_equity_curve(portfolio_history: List[Dict]) -> pd.DataFrame:
     """
     Converts the portfolio history list into a pandas DataFrame.
-    
+
     Args:
         portfolio_history (List[Dict]): The history list from Portfolio.
-        
+
     Returns:
         pd.DataFrame: DataFrame indexed by datetime with equity, returns, etc.
     """
     if not portfolio_history:
         return pd.DataFrame()
-        
+
     df = pd.DataFrame(portfolio_history)
-    df.set_index('datetime', inplace=True)
+    df.set_index("datetime", inplace=True)
     df.sort_index(inplace=True)
-    
+
     # Calculate Returns
-    df['returns'] = df['equity'].pct_change().fillna(0.0)
-    df['cum_returns'] = (1 + df['returns']).cumprod() - 1.0
-    
+    df["returns"] = df["equity"].pct_change().fillna(0.0)
+    df["cum_returns"] = (1 + df["returns"]).cumprod() - 1.0
+
     return df
+
 
 def calculate_drawdown(equity_curve: pd.DataFrame) -> pd.Series:
     """
@@ -31,22 +33,41 @@ def calculate_drawdown(equity_curve: pd.DataFrame) -> pd.Series:
     """
     if equity_curve.empty:
         return pd.Series()
-        
+
     # High Water Mark
-    hwm = equity_curve['equity'].cummax()
-    drawdown = (equity_curve['equity'] - hwm) / hwm
+    hwm = equity_curve["equity"].cummax()
+    drawdown = (equity_curve["equity"] - hwm) / hwm
     return drawdown
 
-def calculate_sharpe_ratio(equity_curve: pd.DataFrame, risk_free_rate: float = 0.0, periods: int = 252) -> float:
+
+def calculate_sharpe_ratio(
+    equity_curve: pd.DataFrame, risk_free_rate: float = 0.0, periods: int = 252
+) -> float:
     """
     Calculates the annualized Sharpe Ratio.
     """
     if equity_curve.empty:
         return 0.0
-        
-    returns = equity_curve['returns']
+
+    returns = equity_curve["returns"]
     if returns.std() == 0:
         return 0.0
-        
+
     sharpe = (returns.mean() - risk_free_rate) / returns.std()
     return sharpe * np.sqrt(periods)
+
+
+def calculate_total_return(equity_curve: pd.DataFrame) -> float:
+    """
+    Calculates the total percentage return.
+    """
+    if equity_curve.empty:
+        return 0.0
+
+    initial_equity = equity_curve["equity"].iloc[0]
+    final_equity = equity_curve["equity"].iloc[-1]
+
+    if initial_equity == 0:
+        return 0.0
+
+    return (final_equity - initial_equity) / initial_equity
