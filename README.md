@@ -1,7 +1,7 @@
 # Quantitative Backtesting Engine
 
 An event-driven backtesting engine designed for incremental development and clear separation of concerns.
-Built as a demonstration of Quantitative Developer skills (Python).
+Built as a demonstration of Professional Quantitative Developer skills (Python).
 
 ## 🏗 Architecture
 
@@ -9,11 +9,11 @@ The system follows a strict **Event-Driven Architecture**, preferred in institut
 
 ### Core Components
 1.  **Event Loop (`BacktestEngine`)**: The central nervous system. A FIFO queue consuming events sequentially.
-2.  **Data Feed (`DataHandler`)**: Drip-feeds historical data (`MarketEvent`) to simulate a live market.
-3.  **Strategy**: Receives `MarketEvent` and decides whether to generate a `SignalEvent`. Now supports stateful strategies like **Moving Average Crossover**.
-4.  **Portfolio**: Manages Cash & Holdings. Receives `SignalEvent` -> Generates `OrderEvent`. Updates state on `FillEvent`.
-5.  **Research (`StrategyResearchRunner`)**: Orchestrates multiple backtests for parameter optimization and strategy sensitivity analysis.
-6.  **Visualization**: Integrated plotting utilities for Equity Curves, Drawdown profiles, and Optimization Heatmaps.
+2.  **Data Fetcher (`DataFetcher`)**: Connects to Yahoo Finance to download real-world data with local CSV caching.
+3.  **Execution Simulator**: Now includes a realistic **Slippage Model** and **Commission logic** to simulate market impact.
+4.  **Strategy**: Supports stateful strategies (e.g., **MA Crossover**). Logic produces `SignalEvent` objects.
+5.  **Portfolio**: Manages Cash & Holdings. Features **Risk-Based Position Sizing** (quantity based on % equity risk).
+6.  **Walk-Forward Analyzer**: Implements rolling in-sample optimization and out-of-sample validation to prevent overfitting.
 
 ### Event Flow
 ```mermaid
@@ -23,7 +23,7 @@ graph LR
     Strategy -->|SignalEvent| Engine
     Engine -->|SignalEvent| Portfolio
     Portfolio -->|OrderEvent| Engine
-    Engine -->|OrderEvent| Execution((Exec Sim))
+    Engine -->|OrderEvent| Execution((Exec Sim + Slippage))
     Execution -->|FillEvent| Engine
     Engine -->|FillEvent| Portfolio
 ```
@@ -40,34 +40,39 @@ Clone the repository and install in editable mode:
 pip install -e .
 ```
 
-### Running Strategy Research
-We've added a robust research layer to test strategy parameters at scale.
-1.  Activate your environment.
-2.  Open `notebooks/research_ma_crossover.ipynb` in VS Code or Jupyter Lab.
-3.  Run the cells to see a **Moving Average Crossover** parameter sweep with interactive heatmaps.
+### Running the Professional Workflow
+The project includes a comprehensive demo of a professional quant workflow:
+1.  Open `notebooks/real_data_research.ipynb`.
+2.  Observe the full lifecycle: **Data Fetching** → **Walk-Forward Validation** → **Final Backtest with Slippage** → **Performance Analysis**.
 
 ### Running Tests
-Unit and integration tests use `pytest`:
+Extensive test suite covering core engine, performance metrics, and validation logic:
 ```bash
 pytest tests/
 ```
 
 ## 📊 Project Status
+
 **Phase 1 (Python Core)**: ✅ Completed
-- [x] Event Loop Skeleton
+- [x] Event Loop Skeleton & FIFO Queue
 - [x] Data Ingestion (CSV)
-- [x] Portfolio Management (Cash/Holdings)
-- [x] Performance Metrics (Sharpe, Drawdown)
+- [x] Portfolio Management & Performance Metrics
 
 **Phase 2 (Research & Visualization)**: ✅ Completed
 - [x] Stateful Strategy Support (MA Crossover)
-- [x] Parameter Sweep Runner
-- [x] Visualization Layer (Matplotlib/Seaborn)
+- [x] Parameter Sweep Runner & Heatmaps
 - [x] Integration Testing for Research Workflow
 
-**Phase 3 (Optimization/C++)**: 🚧 Planned
-- [ ] Migrate `Strategy` calculation to C++
-- [ ] Bind using `pybind11` for high-performance backtesting.
+**Phase 3 (Professional Enhancements)**: ✅ Completed
+- [x] Real-world Data Integration (Yahoo Finance)
+- [x] Local Data Caching Mechanism
+- [x] Realistic Execution Model (Slippage & Commissions)
+- [x] Risk-Based Position Sizing
+- [x] **Walk-Forward Validation Module**
+
+**Phase 4 (Performance Optimization)**: 🚧 Planned
+- [ ] Migrate heavy strategy calculations to C++
+- [ ] Bind using `pybind11` for high-performance execution.
 
 ## 🤝 Contribution
 Designed for clean code readability and extensibility. 
