@@ -2,7 +2,7 @@ import logging
 from collections import deque
 from typing import Optional
 from src.events import Event, MarketEvent, SignalEvent, OrderEvent, FillEvent
-from src.config import setup_logging
+from src.config import setup_logging, SLIPPAGE_RATE
 
 logger = logging.getLogger(__name__)
 
@@ -95,10 +95,16 @@ class BacktestEngine:
 
         # 3. OrderEvent -> Simulated Execution -> FillEvent
         elif isinstance(event, OrderEvent):
-            # Simplified Execution: Fill immediately at latest known price
+            # Simplified Execution: Fill immediately at latest known price with slippage
             # In a real system, this would go to ExecutionHandler
-            fill_price = self.latest_prices.get(event.symbol, 0.0)
-            if fill_price > 0:
+            base_price = self.latest_prices.get(event.symbol, 0.0)
+            if base_price > 0:
+                # Apply slippage: BUY pays more, SELL receives less
+                if event.direction == "BUY":
+                    fill_price = base_price * (1 + SLIPPAGE_RATE)
+                else:  # SELL
+                    fill_price = base_price * (1 - SLIPPAGE_RATE)
+
                 fill = FillEvent(
                     time=event.time,
                     symbol=event.symbol,

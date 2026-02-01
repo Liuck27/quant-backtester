@@ -14,6 +14,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 INITIAL_CAPITAL = 100000.0
 COMMISSION_RATE = 0.001  # 0.1% per trade
 DEFAULT_RISK_PER_TRADE = 0.02  # 2% of capital
+SLIPPAGE_RATE = 0.0005  # 0.05% slippage per trade (simulates market impact)
 
 # Logging Configuration
 LOG_FILE = os.path.join(LOG_DIR, "backtest.log")
