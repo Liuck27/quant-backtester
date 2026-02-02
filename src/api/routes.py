@@ -19,6 +19,8 @@ from src.api.schemas import (
     JobStatus,
 )
 from src.api.jobs import job_manager, BacktestJob
+from src.db.database import SessionLocal
+from src.db import models
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +116,13 @@ def execute_backtest(job: BacktestJob) -> dict:
                 }
             )
 
+    save_results_to_db(
+        job,
+        metrics,
+        trades,
+        portfolio.history[-1]["equity"] if portfolio.history else job.initial_capital,
+    )
+
     return {
         "metrics": metrics,
         "trades": trades,
@@ -123,6 +132,60 @@ def execute_backtest(job: BacktestJob) -> dict:
             else job.initial_capital
         ),
     }
+
+
+def save_results_to_db(
+    job: BacktestJob, metrics: dict, trades_data: list, final_equity: float
+):
+    """
+    Helper to persist backtest results to PostgreSQL.
+    """
+    db = SessionLocal()
+    try:
+        # 1. Update BacktestRun record
+        db_run = (
+            db.query(models.BacktestRun)
+            .filter(models.BacktestRun.job_id == job.job_id)
+            .first()
+        )
+        if db_run:
+            db_run.status = "completed"
+            db_run.completed_at = datetime.utcnow()
+
+            # 2. Save PerformanceResult
+            perf = models.PerformanceResult(
+                backtest_id=db_run.id,
+                total_return=float(metrics.get("total_return", 0.0)),
+                sharpe_ratio=(
+                    float(metrics.get("sharpe_ratio"))
+                    if metrics.get("sharpe_ratio") is not None
+                    else None
+                ),
+                max_drawdown=float(metrics.get("max_drawdown", 0.0)),
+                final_equity=float(final_equity),
+            )
+            db.add(perf)
+
+            # 3. Save Trades
+            for t in trades_data:
+                db_trade = models.Trade(
+                    backtest_id=db_run.id,
+                    timestamp=datetime.fromisoformat(t["timestamp"]),
+                    symbol=t["symbol"],
+                    direction=t["direction"],
+                    quantity=int(t["quantity"]),
+                    price=float(t["price"]),
+                    commission=float(t.get("commission", 0.0)),
+                )
+                db.add(db_trade)
+
+            db.commit()
+            logger.info(f"Results for job {job.job_id} persisted to database")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to save results to DB for job {job.job_id}: {e}")
+    finally:
+        db.close()
 
 
 # ============================================================
@@ -138,7 +201,7 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
     The backtest runs asynchronously in the background.
     Use the returned job_id to check status and retrieve results.
     """
-    # Create job
+    # Create job in memory
     job = job_manager.create_job(
         symbol=request.symbol,
         start_date=request.start_date,
@@ -147,6 +210,24 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
         parameters=request.parameters,
         initial_capital=request.initial_capital,
     )
+
+    # Persist initial record to DB
+    db = SessionLocal()
+    try:
+        db_run = models.BacktestRun(
+            job_id=job.job_id,
+            symbol=job.symbol,
+            strategy=job.strategy,
+            parameters=job.parameters,
+            initial_capital=job.initial_capital,
+            status="running",
+        )
+        db.add(db_run)
+        db.commit()
+    except Exception as e:
+        logger.error(f"Failed to create DB record for job {job.job_id}: {e}")
+    finally:
+        db.close()
 
     # Submit for background execution
     job_manager.submit_job(job.job_id, execute_backtest)
@@ -269,3 +350,48 @@ async def list_jobs():
         )
         for job in jobs
     ]
+
+
+@router.get("/db/results/{job_id}", tags=["Database"])
+async def get_db_results(job_id: str):
+    """
+    Retrieve results directly from PostgreSQL.
+    Demonstrates that data is persisted in the database.
+    """
+    db = SessionLocal()
+    try:
+        db_run = (
+            db.query(models.BacktestRun)
+            .filter(models.BacktestRun.job_id == job_id)
+            .first()
+        )
+        if not db_run:
+            raise HTTPException(status_code=404, detail="Job not found in database")
+
+        if db_run.status != "completed":
+            return {
+                "job_id": job_id,
+                "status": db_run.status,
+                "message": "Result not ready yet",
+            }
+
+        return {
+            "job_id": db_run.job_id,
+            "symbol": db_run.symbol,
+            "status": db_run.status,
+            "metrics": (
+                {
+                    "total_return": db_run.performance.total_return,
+                    "sharpe_ratio": db_run.performance.sharpe_ratio,
+                    "max_drawdown": db_run.performance.max_drawdown,
+                    "final_equity": db_run.performance.final_equity,
+                }
+                if db_run.performance
+                else None
+            ),
+            "trade_count": len(db_run.trades),
+            "created_at": db_run.created_at,
+            "completed_at": db_run.completed_at,
+        }
+    finally:
+        db.close()
