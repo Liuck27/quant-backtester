@@ -80,6 +80,12 @@ pytest tests/
 - [x] Background job management with status tracking
 - [x] Comprehensive API test suite
 
+**Phase 6 (Persistence & Database)**: ✅ Completed
+- [x] PostgreSQL integration via Docker
+- [x] SQLAlchemy ORM for data modeling
+- [x] Database migrations with Alembic
+- [x] Persistent storage for backtest results and trade history
+
 ## 🌐 REST API
 
 The backtesting engine is exposed as a REST API, enabling programmatic access and integration with other systems.
@@ -145,6 +151,26 @@ python setup.py build_ext --inplace
 ```bash
 python benchmark_strategy.py
 ```
+
+## 🗄️ Database Persistence
+
+The system uses **PostgreSQL** to persist backtest results, enabling historical analysis across server restarts.
+
+### Running with Docker
+The database and management tools are containerized for easy setup:
+```bash
+# Start PostgreSQL and Adminer (Web UI)
+docker-compose up -d
+
+# Database Admin UI: http://localhost:8080
+# Login: System=PostgreSQL, Server=db, User=postgres, Pass=postgres, DB=quant_backtester
+```
+
+### Endpoints (Persistence)
+
+| Method | Endpoint | Description |
+|:---|:---|:---|
+| `GET` | `/db/results/{job_id}` | Retrieve results directly from PostgreSQL |
 
 ## 🤝 Contribution
 Designed for clean code readability and extensibility. 
