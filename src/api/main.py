@@ -13,6 +13,8 @@ from fastapi.responses import JSONResponse
 from src.api.routes import router
 from src.api.schemas import HealthResponse
 from src.api.jobs import job_manager
+from src.db.database import SessionLocal
+from sqlalchemy import text
 
 # Configure logging
 logging.basicConfig(
@@ -21,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # App version
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 @asynccontextmanager
@@ -92,16 +94,6 @@ async def general_exception_handler(request: Request, exc: Exception):
 # ============================================================
 
 
-@app.get("/health", response_model=HealthResponse, tags=["System"])
-async def health_check():
-    """
-    Health check endpoint.
-
-    Returns the current status of the API service.
-    """
-    return HealthResponse(status="healthy", version=VERSION, timestamp=datetime.now())
-
-
 @app.get("/", tags=["System"])
 async def root():
     """
@@ -112,6 +104,28 @@ async def root():
         "version": VERSION,
         "docs": "/docs",
         "health": "/health",
+    }
+
+
+@app.get("/health", response_model=HealthResponse, tags=["System"])
+async def health_check():
+    """
+    Health check endpoint.
+    Verifies API is running and can connect to the database.
+    """
+    db_status = "disconnected"
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        db_status = "connected"
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+
+    return {
+        "status": "healthy" if db_status == "connected" else "degraded",
+        "version": VERSION,
+        "timestamp": datetime.utcnow(),
     }
 
 
