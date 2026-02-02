@@ -7,6 +7,7 @@ import logging
 from datetime import datetime
 from typing import List
 from fastapi import APIRouter, HTTPException, BackgroundTasks
+from sqlalchemy import text
 
 from src.api.schemas import (
     BacktestRequest,
@@ -395,3 +396,24 @@ async def get_db_results(job_id: str):
         }
     finally:
         db.close()
+
+
+@router.get("/health", tags=["System"])
+async def health_check():
+    """
+    Health check endpoint.
+    Verifies API is running and can connect to the database.
+    """
+    status = {"status": "healthy", "database": "disconnected", "version": "1.1.0"}
+
+    try:
+        db = SessionLocal()
+        # Simple query to check connection
+        db.execute(text("SELECT 1"))
+        db.close()
+        status["database"] = "connected"
+    except Exception as e:
+        status["status"] = "degraded"
+        status["error"] = str(e)
+
+    return status

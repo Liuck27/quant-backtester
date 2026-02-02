@@ -1,4 +1,16 @@
 services:
+  api:
+    build: .
+    container_name: quant_api
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/quant_backtester
+    volumes:
+      - ./src:/app/src # Sync code for hot reloading
+
   db:
     image: postgres:15-alpine
     container_name: quant_db
