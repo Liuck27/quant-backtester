@@ -35,11 +35,11 @@ This project was built incrementally, evolving from a simple event loop into a p
 
 *   **Phase 1: Foundation**: Core event loop, FIFO queue, and basic market data ingestion.
 *   **Phase 2: Strategy & Portfolio**: Stateful strategy support and equity curve tracking.
-*   **Phase 3: Realism**: Implementation of slippage, commissions, and risk-adjusted position sizing.
+*   **Phase 3: Realism**: Implementation of slippage, commissions, risk-adjusted position sizing, Walk-Forward Validation and real data fetching.
 *   **Phase 4: Optimization**: Migration of compute-intensive strategy logic (MA Crossover) to C++ using `pybind11`.
-*   **Phase 5: Research Engine**: Multi-threaded parameter sweeps, heatmaps, and Walk-Forward Validation.
-*   **Phase 6: Professional API**: FastAPI service with async job management and status tracking.
-*   **Phase 7: Persistence**: PostgreSQL integration with SQLAlchemy and Alembic for historical storage.
+*   **Phase 5: Professional API**: FastAPI service with async job management and status tracking.
+*   **Phase 6: Persistence**: PostgreSQL integration with SQLAlchemy and Alembic for historical storage.
+*   **Phase 7: Docker**: Containerized environment for easy deployment and scaling.
 
 ---
 
