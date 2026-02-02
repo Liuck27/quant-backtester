@@ -74,6 +74,53 @@ pytest tests/
 - [x] Migrate heavy strategy calculations to C++
 - [x] Bind using `pybind11` for high-performance execution.
 
+**Phase 5 (REST API)**: ✅ Completed
+- [x] FastAPI service with async job execution
+- [x] Pydantic request/response validation
+- [x] Background job management with status tracking
+- [x] Comprehensive API test suite
+
+## 🌐 REST API
+
+The backtesting engine is exposed as a REST API, enabling programmatic access and integration with other systems.
+
+### Quick Start
+```bash
+# Start the API server
+uvicorn src.api.main:app --reload
+
+# Open interactive docs
+# http://localhost:8000/docs
+```
+
+### Endpoints
+
+| Method | Endpoint | Description |
+|:---|:---|:---|
+| `POST` | `/backtest/run` | Start a new backtest job |
+| `GET` | `/backtest/{job_id}` | Check job status |
+| `GET` | `/results/{job_id}` | Get full results with metrics |
+| `GET` | `/strategies` | List available strategies |
+| `GET` | `/jobs` | List all jobs |
+| `GET` | `/health` | Health check |
+
+### Example Usage
+```bash
+# Start a backtest
+curl -X POST "http://localhost:8000/backtest/run" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "AAPL",
+    "start_date": "2023-01-01",
+    "end_date": "2024-01-01",
+    "strategy": "ma_crossover",
+    "parameters": {"short_window": 10, "long_window": 50}
+  }'
+
+# Check results (replace {job_id} with returned ID)
+curl "http://localhost:8000/results/{job_id}"
+```
+
 ## ⚡️ C++ Optimization
 
 To demonstrate the ability to identify bottlenecks and optimize performance, the core logic of the `MovingAverageCrossStrategy` has been implemented in C++.
