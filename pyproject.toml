@@ -15,7 +15,11 @@ dependencies = [
     "ipykernel",
     "yfinance",
     "matplotlib",
-    "seaborn"
+    "seaborn",
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "httpx",
 ]
 requires-python = ">=3.9"
 
