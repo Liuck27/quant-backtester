@@ -1,0 +1,17 @@
+.git
+.gitignore
+.venv
+.vscode
+.pytest_cache
+__pycache__
+build/
+*.pyd
+*.so
+tests/
+notebooks/
+data/*.csv
+logs/*.log
+task.md
+implementation_plan.md
+walkthrough.md
+*.egg-info
