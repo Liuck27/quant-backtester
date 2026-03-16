@@ -23,6 +23,8 @@ dependencies = [
     "sqlalchemy",
     "psycopg2-binary",
     "alembic",
+    "scikit-learn",
+    "numpy",
 ]
 requires-python = ">=3.9"
 

@@ -22,6 +22,7 @@ class StrategyType(str, Enum):
     """Available trading strategies."""
 
     MA_CROSSOVER = "ma_crossover"
+    ML_SIGNAL = "ml_signal"
 
 
 # ============================================================

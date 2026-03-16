@@ -43,6 +43,7 @@ def execute_backtest(job: BacktestJob) -> dict:
     from src.data_fetcher import DataFetcher
     from src.data_handler import DataHandler
     from src.strategy import MovingAverageCrossStrategy
+    from src.ml_strategy import MLSignalStrategy
     from src.portfolio import Portfolio
     from src.engine import BacktestEngine
     from src.performance import (
@@ -68,6 +69,14 @@ def execute_backtest(job: BacktestJob) -> dict:
         long_window = job.parameters.get("long_window", 50)
         strategy = MovingAverageCrossStrategy(
             short_window=short_window, long_window=long_window
+        )
+    elif job.strategy == StrategyType.ML_SIGNAL.value:
+        strategy = MLSignalStrategy(
+            model_type=job.parameters.get("model_type", "random_forest"),
+            lookback_window=job.parameters.get("lookback_window", 252),
+            retrain_every=job.parameters.get("retrain_every", 20),
+            long_threshold=job.parameters.get("long_threshold", 0.6),
+            exit_threshold=job.parameters.get("exit_threshold", 0.4),
         )
     else:
         raise ValueError(f"Unknown strategy: {job.strategy}")
@@ -333,7 +342,18 @@ async def list_strategies():
                 "short_window": "Number of periods for the short moving average (default: 10)",
                 "long_window": "Number of periods for the long moving average (default: 50)",
             },
-        )
+        ),
+        StrategyInfo(
+            name="ml_signal",
+            description="Machine Learning Signal Strategy. Trains a classifier on historical price features to predict next-bar direction. Generates LONG signals when predicted up-probability exceeds the long threshold, and EXIT signals when it falls below the exit threshold.",
+            parameters={
+                "model_type": "Classifier to use: 'random_forest' (default), 'gradient_boosting', or 'logistic'",
+                "lookback_window": "Number of past bars used for training (default: 252, ~1 trading year)",
+                "retrain_every": "Retrain the model every N bars (default: 20)",
+                "long_threshold": "Predicted up-probability above which a LONG signal fires (default: 0.6)",
+                "exit_threshold": "Predicted up-probability below which an EXIT signal fires (default: 0.4)",
+            },
+        ),
     ]
 
 
