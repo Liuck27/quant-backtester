@@ -101,6 +101,55 @@ class TestBacktestEndpoints:
         response = client.post("/backtest/run", json=request_data)
         assert response.status_code == 422  # Validation error
 
+    def test_run_backtest_start_after_end_date(self, client):
+        """Should reject request where start_date >= end_date."""
+        request_data = {
+            "symbol": "AAPL",
+            "start_date": "2024-01-01",
+            "end_date": "2023-01-01",
+            "strategy": "ma_crossover",
+            "parameters": {},
+        }
+        response = client.post("/backtest/run", json=request_data)
+        assert response.status_code == 422
+
+    def test_run_backtest_same_start_end_date(self, client):
+        """Should reject request where start_date == end_date."""
+        request_data = {
+            "symbol": "AAPL",
+            "start_date": "2023-01-01",
+            "end_date": "2023-01-01",
+            "strategy": "ma_crossover",
+            "parameters": {},
+        }
+        response = client.post("/backtest/run", json=request_data)
+        assert response.status_code == 422
+
+    def test_run_backtest_invalid_date_format(self, client):
+        """Should reject dates that are not YYYY-MM-DD."""
+        request_data = {
+            "symbol": "AAPL",
+            "start_date": "01/01/2023",
+            "end_date": "2023-06-01",
+            "strategy": "ma_crossover",
+            "parameters": {},
+        }
+        response = client.post("/backtest/run", json=request_data)
+        assert response.status_code == 422
+
+    def test_run_backtest_zero_capital(self, client):
+        """Should reject request with non-positive initial_capital."""
+        request_data = {
+            "symbol": "AAPL",
+            "start_date": "2023-01-01",
+            "end_date": "2023-06-01",
+            "strategy": "ma_crossover",
+            "parameters": {},
+            "initial_capital": 0.0,
+        }
+        response = client.post("/backtest/run", json=request_data)
+        assert response.status_code == 422
+
     def test_run_backtest_missing_required_fields(self, client):
         """Should reject request with missing required fields."""
         request_data = {

@@ -3,10 +3,10 @@ Pydantic schemas for API request/response validation.
 Provides type-safe data structures for backtest configuration and results.
 """
 
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, Dict, List, Any
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class JobStatus(str, Enum):
@@ -39,7 +39,20 @@ class BacktestRequest(BaseModel):
     parameters: Dict[str, Any] = Field(
         default_factory=dict, description="Strategy-specific parameters"
     )
-    initial_capital: float = Field(default=100000.0, description="Starting capital")
+    initial_capital: float = Field(default=100000.0, gt=0, description="Starting capital")
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "BacktestRequest":
+        try:
+            start = date.fromisoformat(self.start_date)
+            end = date.fromisoformat(self.end_date)
+        except ValueError as e:
+            raise ValueError(f"Invalid date format. Use YYYY-MM-DD. Detail: {e}")
+        if start >= end:
+            raise ValueError(
+                f"start_date ({self.start_date}) must be before end_date ({self.end_date})"
+            )
+        return self
 
     model_config = {
         "json_schema_extra": {

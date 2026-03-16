@@ -40,7 +40,15 @@ class Portfolio:
         # Calculate market value of holdings
         holdings_value = 0.0
         for symbol, qty in self.holdings.items():
-            price = self.latest_prices.get(symbol, 0.0)
+            if qty == 0:
+                continue
+            price = self.latest_prices.get(symbol)
+            if price is None:
+                logger.warning(
+                    f"No latest price for '{symbol}' (qty={qty}) during equity recording. "
+                    "Position valued at $0, equity may be understated."
+                )
+                price = 0.0
             holdings_value += qty * price
 
         total_equity = self.current_cash + holdings_value
@@ -92,9 +100,18 @@ class Portfolio:
                 return None
 
             # Risk-based sizing
-            equity = self.current_cash + sum(
-                qty * self.latest_prices.get(s, 0) for s, qty in self.holdings.items()
-            )
+            equity = self.current_cash
+            for s, qty in self.holdings.items():
+                if qty == 0:
+                    continue
+                p = self.latest_prices.get(s)
+                if p is None:
+                    logger.warning(
+                        f"No latest price for holding '{s}' (qty={qty}) during position sizing. "
+                        "Position valued at $0, equity may be understated."
+                    )
+                    p = 0.0
+                equity += qty * p
             risk_amount = equity * risk_per_trade
             quantity = int(risk_amount / price)
 
@@ -111,14 +128,62 @@ class Portfolio:
                 quantity=quantity,
                 direction="BUY",
             )
+        elif event.signal_type == "SHORT":
+            price = self.latest_prices.get(event.symbol)
+            if not price:
+                logger.warning(
+                    f"No price available for {event.symbol}, cannot size short position."
+                )
+                return None
+
+            equity = self.current_cash
+            for s, qty in self.holdings.items():
+                if qty == 0:
+                    continue
+                p = self.latest_prices.get(s)
+                if p is None:
+                    logger.warning(
+                        f"No latest price for holding '{s}' (qty={qty}) during short sizing. "
+                        "Position valued at $0, equity may be understated."
+                    )
+                    p = 0.0
+                equity += qty * p
+
+            risk_amount = equity * risk_per_trade
+            quantity = int(risk_amount / price)
+
+            if quantity <= 0:
+                logger.warning(
+                    f"Sized short quantity is 0 for {event.symbol}. Risk amount: {risk_amount:.2f}"
+                )
+                return None
+
+            return OrderEvent(
+                time=event.time,
+                symbol=event.symbol,
+                order_type="MKT",
+                quantity=quantity,
+                direction="SELL",
+            )
+
         elif event.signal_type == "EXIT":
             current_qty = self.holdings.get(event.symbol, 0)
             if current_qty > 0:
+                # Long position: sell to close
                 return OrderEvent(
                     time=event.time,
                     symbol=event.symbol,
                     order_type="MKT",
                     quantity=current_qty,
                     direction="SELL",
+                )
+            elif current_qty < 0:
+                # Short position: buy to cover
+                return OrderEvent(
+                    time=event.time,
+                    symbol=event.symbol,
+                    order_type="MKT",
+                    quantity=abs(current_qty),
+                    direction="BUY",
                 )
         return None
