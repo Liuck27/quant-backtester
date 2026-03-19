@@ -3,10 +3,14 @@ FastAPI routes for the backtesting API.
 Provides endpoints for running backtests, checking status, and retrieving results.
 """
 
+import asyncio
+import json
 import logging
+import queue
 from datetime import datetime
 from typing import List
 from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 
 from src.api.schemas import (
@@ -40,6 +44,19 @@ def execute_backtest(job: BacktestJob) -> dict:
     This function runs in a background thread and uses the core
     backtesting components to run the simulation.
     """
+    logger.info(f"Starting backtest execution for job {job.job_id}")
+
+    def progress_callback(event_data: dict):
+        job.event_queue.put(event_data)
+
+    try:
+        return _run_backtest(job, progress_callback)
+    except Exception as e:
+        job.event_queue.put({"type": "error", "message": str(e)})
+        raise
+
+
+def _run_backtest(job: BacktestJob, progress_callback) -> dict:
     from src.data_fetcher import DataFetcher
     from src.data_handler import DataHandler
     from src.strategy import MovingAverageCrossStrategy
@@ -53,8 +70,6 @@ def execute_backtest(job: BacktestJob) -> dict:
         calculate_total_return,
     )
     from src.events import FillEvent
-
-    logger.info(f"Starting backtest execution for job {job.job_id}")
 
     # 1. Fetch data
     fetcher = DataFetcher()
@@ -85,7 +100,10 @@ def execute_backtest(job: BacktestJob) -> dict:
 
     # 4. Run backtest
     engine = BacktestEngine(
-        data_handler=data_handler, strategy=strategy, portfolio=portfolio
+        data_handler=data_handler,
+        strategy=strategy,
+        portfolio=portfolio,
+        progress_callback=progress_callback,
     )
     engine.run()
 
@@ -126,21 +144,16 @@ def execute_backtest(job: BacktestJob) -> dict:
                 }
             )
 
-    save_results_to_db(
-        job,
-        metrics,
-        trades,
-        portfolio.history[-1]["equity"] if portfolio.history else job.initial_capital,
-    )
+    final_equity = portfolio.history[-1]["equity"] if portfolio.history else job.initial_capital
+
+    save_results_to_db(job, metrics, trades, final_equity)
+
+    progress_callback({"type": "done", "metrics": metrics, "final_equity": final_equity})
 
     return {
         "metrics": metrics,
         "trades": trades,
-        "final_equity": (
-            portfolio.history[-1]["equity"]
-            if portfolio.history
-            else job.initial_capital
-        ),
+        "final_equity": final_equity,
     }
 
 
@@ -371,6 +384,41 @@ async def list_jobs():
         )
         for job in jobs
     ]
+
+
+@router.get("/stream/{job_id}", tags=["Backtest"])
+async def stream_backtest(job_id: str):
+    """
+    Stream live backtest progress via Server-Sent Events (SSE).
+
+    Connect with EventSource('/stream/{job_id}') in the browser.
+    Emits events of type: 'equity' (per bar), 'fill' (per trade), 'done', 'error'.
+    """
+    job = job_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    async def event_generator():
+        while True:
+            try:
+                event = job.event_queue.get_nowait()
+            except queue.Empty:
+                await asyncio.sleep(0.05)
+                continue
+
+            yield f"data: {json.dumps(event)}\n\n"
+
+            if event.get("type") in ("done", "error"):
+                break
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/db/results/{job_id}", tags=["Database"])

@@ -13,12 +13,13 @@ class BacktestEngine:
     It manages the event queue and dispatches events to the appropriate components.
     """
 
-    def __init__(self, data_handler=None, strategy=None, portfolio=None):
+    def __init__(self, data_handler=None, strategy=None, portfolio=None, progress_callback=None):
         setup_logging()
         self.queue = deque()
         self.data_handler = data_handler
         self.strategy = strategy
         self.portfolio = portfolio
+        self.progress_callback = progress_callback
         self.is_running = False
         self.processed_events = []  # Store processed events for State Verification
 
@@ -80,6 +81,14 @@ class BacktestEngine:
             # Update Portfolio with latest price (Mark to Market)
             if self.portfolio:
                 self.portfolio.update_market_event(event)
+                if self.progress_callback and self.portfolio.history:
+                    snap = self.portfolio.history[-1]
+                    self.progress_callback({
+                        "type": "equity",
+                        "time": snap["datetime"].isoformat() if hasattr(snap["datetime"], "isoformat") else str(snap["datetime"]),
+                        "equity": snap["equity"],
+                        "cash": snap["cash"],
+                    })
 
             if self.strategy:
                 signal = self.strategy.calculate_signals(event)
@@ -118,3 +127,12 @@ class BacktestEngine:
         elif isinstance(event, FillEvent):
             if self.portfolio:
                 self.portfolio.update_fill(event)
+            if self.progress_callback:
+                self.progress_callback({
+                    "type": "fill",
+                    "time": event.time.isoformat() if hasattr(event.time, "isoformat") else str(event.time),
+                    "symbol": event.symbol,
+                    "direction": event.direction,
+                    "quantity": event.quantity,
+                    "price": event.price,
+                })

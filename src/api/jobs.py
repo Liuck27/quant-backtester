@@ -4,6 +4,7 @@ Provides in-memory job store with status tracking.
 """
 
 import uuid
+import queue
 import logging
 from datetime import datetime
 from typing import Dict, Optional, Any
@@ -41,6 +42,7 @@ class BacktestJob:
     completed_at: Optional[datetime] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
+    event_queue: queue.Queue = field(default_factory=queue.Queue)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert job to dictionary for API response."""
