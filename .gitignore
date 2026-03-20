@@ -12,3 +12,11 @@ __pycache__/
 data/*.csv
 !data/.gitkeep
 *.log
+/.claude
+CLAUDE.md
+notes.txt
+ROADMAP.md
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
