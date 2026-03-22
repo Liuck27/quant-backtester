@@ -1,10 +1,10 @@
 # Event-Driven Quantitative Backtesting Framework
 
-A high-performance algorithmic trading simulation engine built with Python and C++. This framework demonstrates institutional-grade architectures for backtesting, featuring realistic execution modeling, walk-forward validation, and a scalable REST API.
+A high-performance algorithmic trading simulation engine built with Python and C++. This framework demonstrates institutional-grade architectures for backtesting, featuring realistic execution modeling, walk-forward validation, a scalable REST API, and a modern React frontend.
 
 ---
 
-## 🏗 Architecture
+## Architecture
 
 The system follows a strict **Event-Driven Architecture**, ensuring high fidelity by simulating market latencies, handling complex order flows, and eliminating look-ahead bias.
 
@@ -27,9 +27,16 @@ graph LR
 - **`Execution`**: Simulated exchange with configurable slippage and commission models.
 - **`DataHandler`**: Yahoo Finance integration with local CSV caching for rapid iteration.
 
+### Frontend
+- **React + Vite + Tailwind CSS** single-page application in `frontend/`.
+- Dark editorial design system ("QuantVault") with Manrope + Inter typography and Material Symbols icons.
+- Three main views: **Backtest Configuration & Live Monitor**, **Job History**, and **Detailed Results Analysis**.
+- Live equity chart streaming via SSE (Server-Sent Events) during backtest execution.
+- API URL configurable via `VITE_API_URL` environment variable for flexible deployment.
+
 ---
 
-## 📈 Project Evolution
+## Project Evolution
 
 This project was built incrementally, evolving from a simple event loop into a production-ready system.
 
@@ -40,24 +47,27 @@ This project was built incrementally, evolving from a simple event loop into a p
 *   **Phase 5: Professional API**: FastAPI service with async job management and status tracking.
 *   **Phase 6: Persistence**: PostgreSQL integration with SQLAlchemy and Alembic for historical storage.
 *   **Phase 7: Docker**: Containerized environment for easy deployment and scaling.
+*   **Phase 8: Frontend**: React SPA with live backtest streaming, job history, and detailed results analysis.
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Docker & Docker Compose
 - Python 3.12+ (if running locally)
+- Node.js 20+ (if running frontend locally)
 - C++ Compiler (for C++ extensions)
 
 ### Execution Mode: Docker (Recommended)
-The easiest way to run the full stack (API + Database + Monitoring) is using the containerized environment:
+The easiest way to run the full stack (Frontend + API + Database + Monitoring) is using the containerized environment:
 
 1.  **Start the Stack**:
     ```bash
     docker-compose up -d --build
     ```
 2.  **Verify Deployment**:
+    - **Frontend**: [http://localhost:5173](http://localhost:5173)
     - **Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
     - **Interactive API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
     - **Database Admin (Adminer)**: [http://localhost:8080](http://localhost:8080)
@@ -76,22 +86,34 @@ To run the framework outside of Docker for development:
     pip install -e .
     python setup.py build_ext --inplace
     ```
+3.  **Start the Frontend**:
+    ```bash
+    cd frontend
+    npm install
+    npm run dev
+    ```
 
 ---
 
-## 🔍 What to Check
+## What to Check
 
-### 1. Research Notebooks
+### 1. Frontend
+Open [http://localhost:5173](http://localhost:5173) to access the QuantVault dashboard where you can:
+- Configure and run backtests with live equity chart streaming
+- Browse job history with status filtering
+- View detailed results with trade logs and performance metrics
+
+### 2. Research Notebooks
 Explore the framework's capabilities through the interactive notebooks in `/notebooks`:
-- **`real_data_research.ipynb`**: Demonstrates the full quant workflow: Data Fetching → Walk-Forward Validation → Performance Analysis.
+- **`real_data_research.ipynb`**: Demonstrates the full quant workflow: Data Fetching -> Walk-Forward Validation -> Performance Analysis.
 - **`benchmark_cpp.ipynb`**: Compares the Python vs. C++ implementation, showcasing a ~3.2x speedup in signal calculation.
 
-### 2. REST API & Job Management
+### 3. REST API & Job Management
 The system supports asynchronous backtest execution. You can submit jobs via the API and track their progress through the database-backed manager.
 - Submit a backtest: `POST /backtest/run`
 - Check results: `GET /results/{job_id}`
 
-### 3. Verification & Tests
+### 4. Verification & Tests
 Ensure the integrity of the framework by running the comprehensive test suite:
 
 - **Unit & Integration Tests**:
@@ -105,9 +127,11 @@ Ensure the integrity of the framework by running the comprehensive test suite:
 
 ---
 
-## 🗄️ Technical Details
-- **Backend**: FastAPI
+## Technical Details
+- **Frontend**: React 18, Vite, Tailwind CSS, Recharts, React Router
+- **Backend**: FastAPI with SSE streaming
 - **Database**: PostgreSQL with SQLAlchemy & Alembic
 - **Optimization**: C++11 with `pybind11`
 - **Data**: Yahoo Finance API integration
 - **Containerization**: Docker Multi-stage builds
+- **Deployment Target**: Vercel (frontend) + Supabase (database) + separate backend host

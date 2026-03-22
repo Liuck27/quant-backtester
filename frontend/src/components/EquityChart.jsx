@@ -1,6 +1,6 @@
 import {
-  ComposedChart, Area, Scatter, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, ReferenceLine,
+  ComposedChart, Area, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer,
 } from 'recharts'
 
 const fmt = (v) =>
@@ -21,11 +21,11 @@ const CustomTooltip = ({ active, payload }) => {
     ? (((d.equity - d.initialEquity) / d.initialEquity) * 100).toFixed(2)
     : null
   return (
-    <div className="bg-panel border border-border rounded px-3 py-2 font-mono text-xs">
-      <div className="text-dim mb-1">{fmtDate(d.time)}</div>
-      <div className="text-bright">{fmt(d.equity)}</div>
+    <div className="bg-surface-container-highest border border-outline-variant/20 rounded-lg px-3 py-2 shadow-2xl backdrop-blur-md">
+      <div className="text-[10px] text-outline uppercase font-bold tracking-tighter mb-1">{fmtDate(d.time)}</div>
+      <div className="text-sm font-bold tabular-nums text-white">{fmt(d.equity)}</div>
       {ret !== null && (
-        <div className={parseFloat(ret) >= 0 ? 'text-accent' : 'text-red'}>
+        <div className={`text-[10px] tabular-nums ${parseFloat(ret) >= 0 ? 'text-secondary' : 'text-tertiary'}`}>
           {parseFloat(ret) >= 0 ? '+' : ''}{ret}%
         </div>
       )}
@@ -33,30 +33,23 @@ const CustomTooltip = ({ active, payload }) => {
   )
 }
 
-// Custom dot for trade markers
 const TradeDot = (props) => {
   const { cx, cy, payload } = props
   if (!payload.fillDirection) return null
   const isBuy = payload.fillDirection === 'BUY'
-  const color = isBuy ? '#00c896' : '#e04848'
-  const size = 5
-  // Triangle up for BUY, down for SELL
-  const points = isBuy
-    ? `${cx},${cy - size} ${cx - size},${cy + size} ${cx + size},${cy + size}`
-    : `${cx},${cy + size} ${cx - size},${cy - size} ${cx + size},${cy - size}`
-  return <polygon points={points} fill={color} opacity={0.85} />
+  const color = isBuy ? '#4edea3' : '#ffb3ad'
+  return <circle cx={cx} cy={cy} r={4} fill={color} />
 }
 
 export default function EquityChart({ equityData, fills = [], live = false }) {
   if (!equityData?.length) {
     return (
-      <div className="flex items-center justify-center h-full text-dim font-mono text-sm">
-        {live ? 'Waiting for data…' : 'No data'}
+      <div className="flex items-center justify-center h-full text-outline font-body text-sm">
+        {live ? 'Waiting for data...' : 'No data'}
       </div>
     )
   }
 
-  // Merge fills into equity data by matching closest time
   const fillMap = {}
   fills.forEach((f) => { fillMap[f.time] = f.direction })
 
@@ -82,26 +75,26 @@ export default function EquityChart({ equityData, fills = [], live = false }) {
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart data={chartData} margin={{ top: 4, right: 16, bottom: 0, left: 8 }}>
+      <ComposedChart data={chartData} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
         <defs>
           <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%"  stopColor="#00c896" stopOpacity={0.18} />
-            <stop offset="95%" stopColor="#00c896" stopOpacity={0} />
+            <stop offset="5%"  stopColor="#adc6ff" stopOpacity={0.2} />
+            <stop offset="95%" stopColor="#adc6ff" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#1c2030" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="#424754" strokeOpacity={0.15} vertical={false} />
         <XAxis
           dataKey="time"
           ticks={ticks}
           tickFormatter={fmtDate}
-          tick={{ fill: '#4a5268', fontSize: 10, fontFamily: 'JetBrains Mono' }}
-          axisLine={{ stroke: '#1c2030' }}
+          tick={{ fill: '#8c909f', fontSize: 10, fontFamily: 'Inter' }}
+          axisLine={{ stroke: '#424754', strokeOpacity: 0.2 }}
           tickLine={false}
         />
         <YAxis
           domain={domain}
           tickFormatter={fmt}
-          tick={{ fill: '#4a5268', fontSize: 10, fontFamily: 'JetBrains Mono' }}
+          tick={{ fill: '#8c909f', fontSize: 10, fontFamily: 'Inter' }}
           axisLine={false}
           tickLine={false}
           width={56}
@@ -110,11 +103,11 @@ export default function EquityChart({ equityData, fills = [], live = false }) {
         <Area
           type="monotone"
           dataKey="equity"
-          stroke="#00c896"
-          strokeWidth={1.5}
+          stroke="#adc6ff"
+          strokeWidth={2.5}
           fill="url(#eqGrad)"
           dot={<TradeDot />}
-          activeDot={{ r: 3, fill: '#00c896' }}
+          activeDot={{ r: 4, fill: '#adc6ff' }}
           isAnimationActive={!live}
         />
       </ComposedChart>
