@@ -41,6 +41,9 @@ class BacktestRequest(BaseModel):
         default_factory=dict, description="Strategy-specific parameters"
     )
     initial_capital: float = Field(default=100000.0, gt=0, description="Starting capital")
+    commission_rate: float = Field(default=0.001, ge=0, le=0.1, description="Commission as a fraction per trade (e.g. 0.001 = 0.1%)")
+    slippage_rate: float = Field(default=0.0005, ge=0, le=0.05, description="Slippage as a fraction per trade (e.g. 0.0005 = 0.05%)")
+    risk_per_trade: float = Field(default=0.02, gt=0, le=1.0, description="Fraction of equity risked per trade (e.g. 0.02 = 2%)")
 
     @model_validator(mode="after")
     def validate_dates(self) -> "BacktestRequest":

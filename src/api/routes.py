@@ -49,6 +49,10 @@ def execute_backtest(job: BacktestJob) -> dict:
 
     def progress_callback(event_data: dict):
         job.event_queue.put(event_data)
+        if event_data.get("type") == "equity":
+            job.partial_equity_curve.append(event_data)
+        elif event_data.get("type") == "fill":
+            job.partial_fills.append(event_data)
 
     try:
         return _run_backtest(job, progress_callback)
@@ -98,7 +102,11 @@ def _run_backtest(job: BacktestJob, progress_callback) -> dict:
     else:
         raise ValueError(f"Unknown strategy: {job.strategy}")
 
-    portfolio = Portfolio(initial_capital=job.initial_capital)
+    portfolio = Portfolio(
+        initial_capital=job.initial_capital,
+        commission_rate=job.commission_rate,
+        risk_per_trade=job.risk_per_trade,
+    )
 
     # 4. Run backtest
     engine = BacktestEngine(
@@ -106,6 +114,7 @@ def _run_backtest(job: BacktestJob, progress_callback) -> dict:
         strategy=strategy,
         portfolio=portfolio,
         progress_callback=progress_callback,
+        slippage_rate=job.slippage_rate,
     )
     engine.run()
 
@@ -155,6 +164,7 @@ def _run_backtest(job: BacktestJob, progress_callback) -> dict:
             "time": h["datetime"].isoformat() if hasattr(h["datetime"], "isoformat") else str(h["datetime"]),
             "equity": h["equity"],
             "cash": h["cash"],
+            "price": h.get("price"),
         }
         for h in portfolio.history
     ]
@@ -251,6 +261,9 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
         strategy=request.strategy.value,
         parameters=request.parameters,
         initial_capital=request.initial_capital,
+        commission_rate=request.commission_rate,
+        slippage_rate=request.slippage_rate,
+        risk_per_trade=request.risk_per_trade,
     )
 
     # Persist initial record to DB
@@ -427,10 +440,22 @@ async def stream_backtest(job_id: str):
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
     async def event_generator():
+        # On (re)connect, replay accumulated history so the client always sees
+        # the full curve from bar 1, not just events from the moment of connection.
+        if job.partial_equity_curve or job.partial_fills:
+            snapshot = {
+                "type": "snapshot",
+                "equity_curve": job.partial_equity_curve,
+                "fills": job.partial_fills,
+            }
+            yield f"data: {json.dumps(snapshot)}\n\n"
+
         while True:
             try:
                 event = job.event_queue.get_nowait()
             except queue.Empty:
+                if job.status.value == "completed":
+                    break
                 await asyncio.sleep(0.05)
                 continue
 

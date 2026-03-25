@@ -13,13 +13,14 @@ class BacktestEngine:
     It manages the event queue and dispatches events to the appropriate components.
     """
 
-    def __init__(self, data_handler=None, strategy=None, portfolio=None, progress_callback=None):
+    def __init__(self, data_handler=None, strategy=None, portfolio=None, progress_callback=None, slippage_rate=SLIPPAGE_RATE):
         setup_logging()
         self.queue = deque()
         self.data_handler = data_handler
         self.strategy = strategy
         self.portfolio = portfolio
         self.progress_callback = progress_callback
+        self.slippage_rate = slippage_rate
         self.is_running = False
         self.processed_events = []  # Store processed events for State Verification
 
@@ -88,6 +89,7 @@ class BacktestEngine:
                         "time": snap["datetime"].isoformat() if hasattr(snap["datetime"], "isoformat") else str(snap["datetime"]),
                         "equity": snap["equity"],
                         "cash": snap["cash"],
+                        "price": event.price,
                     })
 
             if self.strategy:
@@ -110,9 +112,9 @@ class BacktestEngine:
             if base_price > 0:
                 # Apply slippage: BUY pays more, SELL receives less
                 if event.direction == "BUY":
-                    fill_price = base_price * (1 + SLIPPAGE_RATE)
+                    fill_price = base_price * (1 + self.slippage_rate)
                 else:  # SELL
-                    fill_price = base_price * (1 - SLIPPAGE_RATE)
+                    fill_price = base_price * (1 - self.slippage_rate)
 
                 fill = FillEvent(
                     time=event.time,

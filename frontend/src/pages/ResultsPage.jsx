@@ -24,6 +24,8 @@ export default function ResultsPage() {
 
   // Live mode state
   const [isStreaming, setIsStreaming] = useState(isLiveMode)
+  const [chartMode, setChartMode] = useState('equity') // 'equity' | 'price'
+  const [showMA, setShowMA] = useState(false)
   const [liveEquityData, setLiveEquityData] = useState([])
   const [liveFills, setLiveFills] = useState([])
   const [liveEquity, setLiveEquity] = useState(location.state?.initialCapital ?? null)
@@ -51,8 +53,20 @@ export default function ResultsPage() {
       let evt
       try { evt = JSON.parse(e.data) } catch { return }
 
-      if (evt.type === 'equity') {
-        const pt = { time: evt.time, equity: evt.equity, cash: evt.cash }
+      if (evt.type === 'snapshot') {
+        // Replay of accumulated history on (re)connect — replace state wholesale
+        const pts = evt.equity_curve.map((e) => ({ time: e.time, equity: e.equity, cash: e.cash, price: e.price }))
+        const fs  = evt.fills.map((f) => ({ time: f.time, direction: f.direction }))
+        equityRef.current = pts
+        fillsRef.current  = fs
+        setLiveEquityData(pts)
+        setLiveFills(fs)
+        if (pts.length > 0) {
+          setLiveEquity(pts[pts.length - 1].equity)
+          setBarCount(pts.length)
+        }
+      } else if (evt.type === 'equity') {
+        const pt = { time: evt.time, equity: evt.equity, cash: evt.cash, price: evt.price }
         equityRef.current = [...equityRef.current, pt]
         setLiveEquityData([...equityRef.current])
         setLiveEquity(evt.equity)
@@ -106,6 +120,12 @@ export default function ResultsPage() {
 
   const equityData = isStreaming ? liveEquityData : (results?.equity_curve ?? [])
   const fills = isStreaming ? liveFills : (results?.fills ?? [])
+
+  const isMACrossover = strategy === 'ma_crossover'
+  const maParams = isMACrossover ? {
+    shortWindow: results?.parameters?.short_window ?? 10,
+    longWindow:  results?.parameters?.long_window  ?? 50,
+  } : null
 
   const totalReturn = metrics?.total_return
   const sharpeRatio = metrics?.sharpe_ratio
@@ -178,8 +198,8 @@ export default function ResultsPage() {
           value={isStreaming ? fmtPct(liveReturn) : fmtPct(totalReturn)}
           color={
             isStreaming
-              ? (liveReturn != null ? (liveReturn >= 0 ? 'text-secondary' : 'text-tertiary') : 'text-outline')
-              : (totalReturn >= 0 ? 'text-secondary' : 'text-tertiary')
+              ? (liveReturn != null ? (liveReturn >= 0 ? 'text-secondary' : 'text-tertiary-container') : 'text-outline')
+              : (totalReturn >= 0 ? 'text-secondary' : 'text-tertiary-container')
           }
           computing={isStreaming && liveReturn == null}
         />
@@ -201,42 +221,85 @@ export default function ResultsPage() {
         <SparkMetric
           label="Max Drawdown"
           value={fmtPct(maxDrawdown)}
-          color={maxDrawdown != null ? 'text-tertiary' : 'text-outline'}
+          color={maxDrawdown != null ? 'text-tertiary-container' : 'text-outline'}
           computing={isStreaming}
         />
       </div>
 
-      {/* Equity Chart */}
+      {/* Chart */}
       <section className="bg-surface-container-low rounded-xl p-8">
         <div className="flex justify-between items-start mb-6">
           <div>
-            <h3 className="text-xl font-bold font-headline text-white mb-1">Equity Growth Curve</h3>
+            {/* Tab switcher */}
+            <div className="flex gap-1 bg-surface-container-lowest rounded-lg p-1 mb-3 w-fit">
+              {[
+                { key: 'equity', label: 'Equity Curve' },
+                { key: 'price',  label: 'Stock Price'  },
+              ].map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setChartMode(key)}
+                  className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                    chartMode === key
+                      ? 'bg-surface-container-high text-white'
+                      : 'text-outline hover:text-on-surface'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <p className="text-sm text-outline">
-              {isStreaming ? 'Computing in real-time...' : 'Net portfolio value in USD over the simulation period.'}
+              {isStreaming
+                ? 'Computing in real-time...'
+                : chartMode === 'equity'
+                  ? 'Net portfolio value in USD over the simulation period.'
+                  : `${symbol} closing price with strategy entry/exit markers.`}
             </p>
           </div>
           <div className="flex gap-4 items-center">
-            {isStreaming && (
+            {isMACrossover && chartMode === 'price' && (
+              <button
+                onClick={() => setShowMA((v) => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-colors ${
+                  showMA
+                    ? 'bg-primary/10 text-primary border-primary/30'
+                    : 'bg-surface-container-highest text-outline border-outline-variant/20 hover:text-on-surface'
+                }`}
+              >
+                <span className="material-symbols-outlined text-xs">show_chart</span>
+                MA Lines
+              </button>
+            )}
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-secondary" />
+              <span className="text-[10px] font-semibold text-outline uppercase">Buy</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-tertiary-container" />
+              <span className="text-[10px] font-semibold text-outline uppercase">Sell</span>
+            </div>
+            {showMA && maParams && chartMode === 'price' && (
               <>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-secondary" />
-                  <span className="text-[10px] font-semibold text-outline uppercase">Buy</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-5 h-[2px] rounded bg-[#ffd966]" />
+                  <span className="text-[10px] font-semibold text-outline uppercase">MA {maParams.shortWindow}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-tertiary-container" />
-                  <span className="text-[10px] font-semibold text-outline uppercase">Sell</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-5 h-[2px] rounded bg-[#ff8c42]" />
+                  <span className="text-[10px] font-semibold text-outline uppercase">MA {maParams.longWindow}</span>
                 </div>
               </>
             )}
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-primary" />
-              <span className="text-xs font-semibold text-on-surface">Equity</span>
+              <div className={`w-3 h-3 rounded-full ${chartMode === 'equity' ? 'bg-primary' : 'bg-[#c9a7ff]'}`} />
+              <span className="text-xs font-semibold text-on-surface">{chartMode === 'equity' ? 'Equity' : 'Price'}</span>
             </div>
           </div>
         </div>
         <div className="h-[400px] w-full">
           {equityData.length > 0 ? (
-            <EquityChart equityData={equityData} fills={fills} live={isStreaming} />
+            <EquityChart equityData={equityData} fills={fills} live={isStreaming} mode={chartMode} showMA={showMA} maParams={maParams} />
           ) : (
             <div className="flex items-center justify-center h-full text-outline text-sm">
               {isStreaming ? 'Waiting for first data point...' : 'Equity curve data not available'}
@@ -283,7 +346,7 @@ export default function ResultsPage() {
                   <tr key={i} className="group hover:bg-surface-container-high transition-colors">
                     <td className="px-6 py-4 text-sm font-medium tabular-nums text-on-surface">{fmtDate(t.timestamp)}</td>
                     <td className="px-6 py-4">
-                      <span className={`${isBuy ? 'bg-secondary/10 text-secondary border-secondary/20' : 'bg-tertiary/10 text-tertiary border-tertiary/20'} text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide border`}>
+                      <span className={`${isBuy ? 'bg-secondary/10 text-secondary border-secondary/20' : 'bg-tertiary-container/10 text-tertiary-container border-tertiary-container/20'} text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide border`}>
                         {t.direction}
                       </span>
                     </td>

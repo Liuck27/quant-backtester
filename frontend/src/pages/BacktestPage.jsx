@@ -24,6 +24,10 @@ export default function BacktestPage() {
   const [capital, setCapital] = useState(100000)
   const [maParams, setMaParams] = useState(MA_DEFAULTS)
   const [mlParams, setMlParams] = useState(ML_DEFAULTS)
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [commissionRate, setCommissionRate] = useState(0.1)   // displayed as %
+  const [slippageRate, setSlippageRate] = useState(0.05)      // displayed as %
+  const [riskPerTrade, setRiskPerTrade] = useState(2.0)       // displayed as %
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
@@ -50,6 +54,9 @@ export default function BacktestPage() {
         strategy,
         parameters: params,
         initial_capital: Number(capital),
+        commission_rate: Number(commissionRate) / 100,
+        slippage_rate: Number(slippageRate) / 100,
+        risk_per_trade: Number(riskPerTrade) / 100,
       })
 
       navigate(`/results/${res.job_id}`, {
@@ -119,6 +126,25 @@ export default function BacktestPage() {
               </div>
             )}
             <ParamRow label="Initial Capital" value={capital} onChange={setCapital} className="mt-4" inputClassName="w-24" />
+          </div>
+
+          {/* Advanced */}
+          <div className="pt-4 border-t border-outline-variant/10">
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((v) => !v)}
+              className="flex items-center justify-between w-full text-xs font-bold text-outline hover:text-on-surface transition-colors"
+            >
+              <span className="uppercase tracking-wider">Advanced</span>
+              <span className="material-symbols-outlined text-base">{advancedOpen ? 'expand_less' : 'expand_more'}</span>
+            </button>
+            {advancedOpen && (
+              <div className="mt-4 space-y-4">
+                <ParamRow label="Commission %" value={commissionRate} onChange={setCommissionRate} step={0.01} inputClassName="w-20" />
+                <ParamRow label="Slippage %" value={slippageRate} onChange={setSlippageRate} step={0.01} inputClassName="w-20" />
+                <ParamRow label="Risk per Trade %" value={riskPerTrade} onChange={setRiskPerTrade} step={0.5} inputClassName="w-20" />
+              </div>
+            )}
           </div>
 
           {error && (

@@ -11,6 +11,7 @@ from typing import Dict, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor, Future
+from src.config import COMMISSION_RATE, SLIPPAGE_RATE, DEFAULT_RISK_PER_TRADE
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +38,13 @@ class BacktestJob:
     strategy: str
     parameters: Dict[str, Any]
     initial_capital: float
+    commission_rate: float = COMMISSION_RATE
+    slippage_rate: float = SLIPPAGE_RATE
+    risk_per_trade: float = DEFAULT_RISK_PER_TRADE
     status: JobStatus = JobStatus.PENDING
     created_at: datetime = field(default_factory=datetime.now)
+    partial_equity_curve: list = field(default_factory=list)
+    partial_fills: list = field(default_factory=list)
     completed_at: Optional[datetime] = None
     result: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
@@ -79,6 +85,9 @@ class JobManager:
         strategy: str,
         parameters: Dict[str, Any],
         initial_capital: float = 100000.0,
+        commission_rate: float = COMMISSION_RATE,
+        slippage_rate: float = SLIPPAGE_RATE,
+        risk_per_trade: float = DEFAULT_RISK_PER_TRADE,
     ) -> BacktestJob:
         """
         Create a new backtest job.
@@ -95,6 +104,9 @@ class JobManager:
             strategy=strategy,
             parameters=parameters,
             initial_capital=initial_capital,
+            commission_rate=commission_rate,
+            slippage_rate=slippage_rate,
+            risk_per_trade=risk_per_trade,
         )
         self.jobs[job_id] = job
         logger.info(f"Created job {job_id}: {symbol} with {strategy}")

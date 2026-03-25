@@ -16,8 +16,15 @@ class Portfolio:
     Tracks equity curve history.
     """
 
-    def __init__(self, initial_capital: float = INITIAL_CAPITAL):
+    def __init__(
+        self,
+        initial_capital: float = INITIAL_CAPITAL,
+        commission_rate: float = COMMISSION_RATE,
+        risk_per_trade: float = DEFAULT_RISK_PER_TRADE,
+    ):
         self.initial_capital = initial_capital
+        self.commission_rate = commission_rate
+        self.risk_per_trade = risk_per_trade
         self.current_cash = initial_capital
         self.holdings: Dict[str, int] = defaultdict(int)  # Symbol -> Quantity
         self.current_value = initial_capital
@@ -31,9 +38,9 @@ class Portfolio:
         Update latest prices and record equity curve point.
         """
         self.latest_prices[event.symbol] = event.price
-        self._record_equity(event.time)
+        self._record_equity(event.time, event.price)
 
-    def _record_equity(self, timestamp: datetime):
+    def _record_equity(self, timestamp: datetime, price: float = None):
         """
         Calculates total equity (cash + open positions) and appends to history.
         """
@@ -42,14 +49,14 @@ class Portfolio:
         for symbol, qty in self.holdings.items():
             if qty == 0:
                 continue
-            price = self.latest_prices.get(symbol)
-            if price is None:
+            p = self.latest_prices.get(symbol)
+            if p is None:
                 logger.warning(
                     f"No latest price for '{symbol}' (qty={qty}) during equity recording. "
                     "Position valued at $0, equity may be understated."
                 )
-                price = 0.0
-            holdings_value += qty * price
+                p = 0.0
+            holdings_value += qty * p
 
         total_equity = self.current_cash + holdings_value
 
@@ -59,6 +66,7 @@ class Portfolio:
                 "cash": self.current_cash,
                 "equity": total_equity,
                 "holdings_value": holdings_value,
+                "price": price,
             }
         )
 
@@ -71,7 +79,7 @@ class Portfolio:
         commission = (
             event.commission
             if event.commission > 0
-            else (abs(cash_delta) * COMMISSION_RATE)
+            else (abs(cash_delta) * self.commission_rate)
         )
 
         self.current_cash -= cash_delta + commission
@@ -84,13 +92,15 @@ class Portfolio:
         # Note: We could record equity here too, but usually done on MarketEvent (close of bar)
 
     def create_order(
-        self, event: SignalEvent, risk_per_trade: float = DEFAULT_RISK_PER_TRADE
+        self, event: SignalEvent, risk_per_trade: float = None
     ) -> Optional[OrderEvent]:
         """
         Converts a SignalEvent into an OrderEvent.
         Implements risk-based position sizing:
         quantity = (Equity * Risk%) / current_price
         """
+        if risk_per_trade is None:
+            risk_per_trade = self.risk_per_trade
         if event.signal_type == "LONG":
             price = self.latest_prices.get(event.symbol)
             if not price:

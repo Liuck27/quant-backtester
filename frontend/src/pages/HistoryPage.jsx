@@ -43,7 +43,14 @@ export default function HistoryPage() {
     : jobs.filter((j) => j.status?.toUpperCase() === filter.toUpperCase())
 
   const handleViewResults = async (job) => {
-    if (job.status?.toUpperCase() !== 'COMPLETED') return
+    const status = job.status?.toUpperCase()
+    if (status === 'RUNNING') {
+      navigate(`/results/${job.job_id}`, {
+        state: { live: true, symbol: job.symbol, strategy: job.strategy },
+      })
+      return
+    }
+    if (status !== 'COMPLETED') return
     try {
       const results = await getResults(job.job_id)
       navigate(`/results/${job.job_id}`, { state: { results } })
@@ -141,7 +148,7 @@ export default function HistoryPage() {
                   {totalReturn != null ? (
                     <div className="text-right flex-1">
                       <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-0.5">Total Return</p>
-                      <p className={`text-xl font-bold tabular-nums ${totalReturn >= 0 ? 'text-secondary' : 'text-tertiary'}`}>
+                      <p className={`text-xl font-bold tabular-nums ${totalReturn >= 0 ? 'text-secondary' : 'text-tertiary-container'}`}>
                         {totalReturn >= 0 ? '+' : ''}{Number(totalReturn).toFixed(1)}%
                       </p>
                     </div>
@@ -170,9 +177,9 @@ export default function HistoryPage() {
                 <button
                   onClick={() => handleViewResults(job)}
                   className={`p-3 rounded-lg bg-surface-container-highest text-on-surface hover:text-primary transition-colors ${
-                    job.status?.toUpperCase() !== 'COMPLETED' ? 'opacity-50 cursor-not-allowed' : ''
+                    ['PENDING', 'FAILED'].includes(job.status?.toUpperCase()) ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
-                  disabled={job.status?.toUpperCase() !== 'COMPLETED'}
+                  disabled={['PENDING', 'FAILED'].includes(job.status?.toUpperCase())}
                 >
                   <span className="material-symbols-outlined">chevron_right</span>
                 </button>
