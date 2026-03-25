@@ -2,8 +2,6 @@ export default function TopBar() {
   return (
     <header className="bg-background/80 backdrop-blur-xl sticky top-0 z-40 w-full flex justify-between items-center px-8 h-16">
       <div className="flex items-center gap-4">
-        <span className="text-lg font-bold text-white font-headline">Financial Intelligence</span>
-        <div className="h-4 w-[1px] bg-outline-variant/30" />
         <div className="flex items-center gap-2 bg-secondary/10 px-2 py-0.5 rounded border border-secondary/20">
           <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
           <span className="text-[10px] font-bold text-secondary tracking-tight">SYSTEM ONLINE</span>

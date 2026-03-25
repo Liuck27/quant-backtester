@@ -57,5 +57,7 @@ class PerformanceResult(Base):
     sharpe_ratio = Column(Float, nullable=True)
     max_drawdown = Column(Float)  # as percentage
     final_equity = Column(Float)
+    equity_curve = Column(JSON, nullable=True)  # [{time, equity, cash}, ...]
+    fills = Column(JSON, nullable=True)          # [{time, direction}, ...]
 
     backtest_run = relationship("BacktestRun", back_populates="performance")

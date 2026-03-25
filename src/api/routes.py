@@ -17,6 +17,7 @@ from src.api.schemas import (
     BacktestRequest,
     BacktestResult,
     JobStatusResponse,
+    JobSummary,
     StrategyInfo,
     StrategyType,
     PerformanceMetrics,
@@ -68,6 +69,7 @@ def _run_backtest(job: BacktestJob, progress_callback) -> dict:
         calculate_drawdown,
         calculate_sharpe_ratio,
         calculate_total_return,
+        calculate_win_rate,
     )
     from src.events import FillEvent
 
@@ -144,9 +146,21 @@ def _run_backtest(job: BacktestJob, progress_callback) -> dict:
                 }
             )
 
+    metrics["win_rate"] = calculate_win_rate(trades)
+
     final_equity = portfolio.history[-1]["equity"] if portfolio.history else job.initial_capital
 
-    save_results_to_db(job, metrics, trades, final_equity)
+    equity_curve_data = [
+        {
+            "time": h["datetime"].isoformat() if hasattr(h["datetime"], "isoformat") else str(h["datetime"]),
+            "equity": h["equity"],
+            "cash": h["cash"],
+        }
+        for h in portfolio.history
+    ]
+    fills_data = [{"time": t["timestamp"], "direction": t["direction"]} for t in trades]
+
+    save_results_to_db(job, metrics, trades, final_equity, equity_curve_data, fills_data)
 
     progress_callback({"type": "done", "metrics": metrics, "final_equity": final_equity})
 
@@ -154,11 +168,14 @@ def _run_backtest(job: BacktestJob, progress_callback) -> dict:
         "metrics": metrics,
         "trades": trades,
         "final_equity": final_equity,
+        "equity_curve": equity_curve_data,
+        "fills": fills_data,
     }
 
 
 def save_results_to_db(
-    job: BacktestJob, metrics: dict, trades_data: list, final_equity: float
+    job: BacktestJob, metrics: dict, trades_data: list, final_equity: float,
+    equity_curve_data: list = None, fills_data: list = None,
 ):
     """
     Helper to persist backtest results to PostgreSQL.
@@ -186,6 +203,8 @@ def save_results_to_db(
                 ),
                 max_drawdown=float(metrics.get("max_drawdown", 0.0)),
                 final_equity=float(final_equity),
+                equity_curve=equity_curve_data,
+                fills=fills_data,
             )
             db.add(perf)
 
@@ -328,6 +347,9 @@ async def get_backtest_results(job_id: str):
             for t in job.result.get("trades", [])
         ]
 
+    equity_curve = job.result.get("equity_curve") if job.result else None
+    fills = job.result.get("fills") if job.result else None
+
     return BacktestResult(
         job_id=job.job_id,
         status=job.status,
@@ -336,6 +358,8 @@ async def get_backtest_results(job_id: str):
         parameters=job.parameters,
         metrics=metrics,
         trades=trades,
+        equity_curve=equity_curve,
+        fills=fills,
         error=job.error,
         created_at=job.created_at,
         completed_at=job.completed_at,
@@ -370,17 +394,21 @@ async def list_strategies():
     ]
 
 
-@router.get("/jobs", response_model=List[JobStatusResponse], tags=["Jobs"])
+@router.get("/jobs", response_model=List[JobSummary], tags=["Jobs"])
 async def list_jobs():
     """
     List all backtest jobs (most recent first).
     """
     jobs = job_manager.get_all_jobs()
     return [
-        JobStatusResponse(
+        JobSummary(
             job_id=job.job_id,
             status=job.status,
-            progress=f"{job.symbol} - {job.strategy}",
+            symbol=job.symbol,
+            strategy=job.strategy,
+            created_at=job.created_at,
+            completed_at=job.completed_at,
+            total_return=job.result.get("metrics", {}).get("total_return") if job.result else None,
         )
         for job in jobs
     ]

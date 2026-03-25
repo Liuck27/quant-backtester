@@ -11,7 +11,7 @@ export default function Sidebar() {
   return (
     <aside className="bg-surface-container-low h-screen w-64 fixed left-0 top-0 overflow-y-auto flex flex-col py-8 px-4 z-50">
       <div className="mb-10 px-2">
-        <h1 className="text-xl font-bold tracking-tight text-white font-headline">QuantVault</h1>
+        <h1 className="text-xl font-bold tracking-tight text-white font-headline">QuantBacktester</h1>
         <p className="text-[10px] uppercase tracking-widest text-primary/60 font-semibold">Institutional Grade</p>
       </div>
 

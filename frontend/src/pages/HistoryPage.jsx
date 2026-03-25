@@ -103,7 +103,7 @@ export default function HistoryPage() {
         <div className="grid grid-cols-1 gap-4">
           {filtered.map((job) => {
             const st = statusColors[job.status?.toUpperCase()] ?? statusColors.PENDING
-            const totalReturn = job.metrics?.total_return
+            const totalReturn = job.total_return
 
             return (
               <div

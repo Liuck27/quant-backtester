@@ -1,7 +1,17 @@
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-async function req(path, opts = {}) {
-  const res = await fetch(`${BASE}${path}`, opts)
+async function req(path, opts = {}, timeoutMs = 10000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let res
+  try {
+    res = await fetch(`${BASE}${path}`, { ...opts, signal: controller.signal })
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Request timed out')
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
   if (!res.ok) {
     const text = await res.text()
     let msg

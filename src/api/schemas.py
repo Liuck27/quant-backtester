@@ -108,6 +108,8 @@ class BacktestResult(BaseModel):
     parameters: Dict[str, Any]
     metrics: Optional[PerformanceMetrics] = None
     trades: Optional[List[TradeRecord]] = None
+    equity_curve: Optional[List[Dict[str, Any]]] = None
+    fills: Optional[List[Dict[str, Any]]] = None
     error: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
@@ -119,6 +121,18 @@ class JobStatusResponse(BaseModel):
     job_id: str
     status: JobStatus
     progress: Optional[str] = None
+
+
+class JobSummary(BaseModel):
+    """Summary of a backtest job for the history list."""
+
+    job_id: str
+    status: JobStatus
+    symbol: str
+    strategy: str
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    total_return: Optional[float] = None
 
 
 class StrategyInfo(BaseModel):
