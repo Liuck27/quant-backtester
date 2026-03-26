@@ -16,8 +16,8 @@ Trains a binary classifier on historical price features to predict next-bar dire
 - **Files:** [`src/ml_strategy.py`](src/ml_strategy.py), [`tests/test_ml_strategy.py`](tests/test_ml_strategy.py)
 - **API:** `strategy: "ml_signal"` with params `model_type`, `lookback_window`, `retrain_every`, `long_threshold`, `exit_threshold`
 
-### ⬜ 1b. `LSTMStrategy` (PyTorch)
-Sequence model (LSTM) that takes the last N closing prices and predicts next-bar direction.
+### ⏸️ 1b. `LSTMStrategy` (PyTorch) — deferred
+Sequence model (LSTM) that takes the last N closing prices and predicts next-bar direction. Skipped for now to prioritise the frontend; will revisit after Phase 3.
 
 - **Files to create:** `src/lstm_strategy.py`
 - **Dependency:** `torch` (CPU-only build)
@@ -26,34 +26,15 @@ Sequence model (LSTM) that takes the last N closing prices and predicts next-bar
 
 ---
 
-## Phase 2 — Monitoring
-*Resume signal: observability, Prometheus, production engineering*
-
-### ⬜ 2a. Prometheus metrics endpoint
-- Add `prometheus-fastapi-instrumentator` to `src/api/main.py`
-- Exposes `/metrics`: request latency, job queue depth, backtest duration histogram
-
-### ⬜ 2b. Grafana dashboard via docker-compose
-- Add `grafana` + `prometheus` services to `docker-compose.yml`
-- Pre-provision dashboard: active jobs, backtest durations, API latency, strategy comparison
-- Files to create: `monitoring/prometheus.yml`, `monitoring/grafana/dashboard.json`
-
-### ⬜ 2c. Structured JSON logging
-- Replace plain `logger.info(f"...")` with `python-json-logger`
-- Each entry includes: `job_id`, `strategy`, `symbol`, `duration_ms`
-- File to modify: all files that use `logger`
-
----
-
-## Phase 3 — Live Frontend
+## Phase 2 — Live Frontend
 *Resume signal: React, SSE/real-time, data visualization, full-stack*
 
-### ⬜ 3a. Backend: Server-Sent Events (SSE) stream
+### ✅ 2a. Backend: Server-Sent Events (SSE) stream
 - Add optional progress callback to `BacktestEngine` so it publishes each `FillEvent` and equity snapshot
 - Add `/stream/{job_id}` SSE endpoint in `src/api/routes.py`
-- SSE chosen over WebSockets: simpler, one-directional, no protocol upgrade needed
+- SSE chosen over WebSockets because the data flow is strictly server → client (the browser never needs to send messages mid-stream). SSE reuses plain HTTP/1.1, requires no protocol upgrade handshake, and is natively handled by the browser's `EventSource` API — no client library needed. WebSockets add bidirectional complexity and a separate upgrade negotiation that buys nothing here.
 
-### ⬜ 3b. React frontend
+### ✅ 2b. React frontend
 - **Stack:** React + Recharts + TailwindCSS
 - **Location:** `frontend/` in repo root
 - **Views:**
@@ -61,13 +42,32 @@ Sequence model (LSTM) that takes the last N closing prices and predicts next-bar
   - Live view: equity curve updating bar-by-bar, trade markers (▲/▼) on chart, real-time metrics panel
   - Results view: final metrics, full trade table, equity curve
 
-### ⬜ 3c. Docker integration
+### ⬜ 2c. Docker integration
 - Add `frontend` service to `docker-compose.yml` (nginx) or serve built static files from FastAPI `StaticFiles`
+
+---
+
+## Phase 3 — Monitoring
+*Resume signal: observability, Prometheus, production engineering*
+
+### ⬜ 3a. Prometheus metrics endpoint
+- Add `prometheus-fastapi-instrumentator` to `src/api/main.py`
+- Exposes `/metrics`: request latency, job queue depth, backtest duration histogram
+
+### ⬜ 3b. Grafana dashboard via docker-compose
+- Add `grafana` + `prometheus` services to `docker-compose.yml`
+- Pre-provision dashboard: active jobs, backtest durations, API latency, strategy comparison
+- Files to create: `monitoring/prometheus.yml`, `monitoring/grafana/dashboard.json`
+
+### ⬜ 3c. Structured JSON logging
+- Replace plain `logger.info(f"...")` with `python-json-logger`
+- Each entry includes: `job_id`, `strategy`, `symbol`, `duration_ms`
+- File to modify: all files that use `logger`
 
 ---
 
 ## Deployment (when ready)
 - **Database:** swap to [Supabase](https://supabase.com) free tier — single `DATABASE_URL` env var change
 - **API:** Render.com free tier (Docker, auto-deploy on push to `main`)
-- **Frontend:** Render.com static site or Netlify (both free)
+- **Frontend:** [Vercel](https://vercel.com) free (Hobby) tier — zero-config for Vite/React, global CDN, preview deployments on every branch push, automatic SSL
 - **Total cost: $0**

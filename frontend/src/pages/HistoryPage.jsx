@@ -44,6 +44,12 @@ export default function HistoryPage() {
 
   const handleViewResults = async (job) => {
     const status = job.status?.toUpperCase()
+
+    if (job.job_type === 'research') {
+      if (status === 'COMPLETED') navigate(`/research?job=${job.job_id}`)
+      return
+    }
+
     if (status === 'RUNNING') {
       navigate(`/results/${job.job_id}`, {
         state: { live: true, symbol: job.symbol, strategy: job.strategy },
@@ -147,9 +153,13 @@ export default function HistoryPage() {
                 <div className="flex items-center gap-6 w-72">
                   {totalReturn != null ? (
                     <div className="text-right flex-1">
-                      <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-0.5">Total Return</p>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-0.5">
+                        {job.job_type === 'research' ? 'Best Sharpe' : 'Total Return'}
+                      </p>
                       <p className={`text-xl font-bold tabular-nums ${totalReturn >= 0 ? 'text-secondary' : 'text-tertiary-container'}`}>
-                        {totalReturn >= 0 ? '+' : ''}{Number(totalReturn).toFixed(1)}%
+                        {job.job_type === 'research'
+                          ? Number(totalReturn).toFixed(2)
+                          : `${totalReturn >= 0 ? '+' : ''}${Number(totalReturn).toFixed(1)}%`}
                       </p>
                     </div>
                   ) : job.status?.toUpperCase() === 'RUNNING' ? (

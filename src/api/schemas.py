@@ -109,6 +109,7 @@ class BacktestResult(BaseModel):
     symbol: str
     strategy: str
     parameters: Dict[str, Any]
+    initial_capital: Optional[float] = None
     metrics: Optional[PerformanceMetrics] = None
     trades: Optional[List[TradeRecord]] = None
     equity_curve: Optional[List[Dict[str, Any]]] = None

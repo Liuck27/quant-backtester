@@ -191,6 +191,27 @@ export default function ResultsPage() {
         </div>
       </section>
 
+      {/* Config strip — shown once results are available */}
+      {results?.parameters && (
+        <section className="flex flex-wrap gap-2">
+          {Object.entries(results.parameters).map(([key, val]) => (
+            <span
+              key={key}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-high border border-outline-variant/15 text-xs"
+            >
+              <span className="text-outline font-medium">{key.replace(/_/g, ' ')}</span>
+              <span className="text-white font-bold">{String(val)}</span>
+            </span>
+          ))}
+          {results.initial_capital != null && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-high border border-outline-variant/15 text-xs">
+              <span className="text-outline font-medium">capital</span>
+              <span className="text-white font-bold">{fmtMoney(results.initial_capital)}</span>
+            </span>
+          )}
+        </section>
+      )}
+
       {/* Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <SparkMetric

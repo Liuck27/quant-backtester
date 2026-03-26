@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 
 const navItems = [
   { to: '/', icon: 'history_toggle_off', label: 'Backtest' },
+  { to: '/research', icon: 'grid_view', label: 'Research' },
   { to: '/history', icon: 'manage_history', label: 'History' },
 ]
 

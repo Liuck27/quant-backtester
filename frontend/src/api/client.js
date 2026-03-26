@@ -36,3 +36,14 @@ export const getJobs      = ()      => req('/jobs')
 
 export const openStream = (jobId) =>
   new EventSource(`${BASE}/stream/${jobId}`)
+
+export const runResearch = (body) =>
+  req('/research/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }, 15000)
+
+export const getResearchJob  = (jobId) => req(`/research/${jobId}`)
+export const openResearchStream = (jobId) =>
+  new EventSource(`${BASE}/research/stream/${jobId}`)

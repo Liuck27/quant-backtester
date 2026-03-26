@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.api.routes import router
+from src.api.research_routes import research_router
 from src.api.schemas import HealthResponse
 from src.api.jobs import job_manager
 from src.db.database import SessionLocal
@@ -134,3 +135,4 @@ async def health_check():
 
 # Include routes
 app.include_router(router)
+app.include_router(research_router)

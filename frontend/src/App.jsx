@@ -4,6 +4,7 @@ import TopBar from './components/TopBar'
 import BacktestPage from './pages/BacktestPage'
 import HistoryPage from './pages/HistoryPage'
 import ResultsPage from './pages/ResultsPage'
+import ResearchPage from './pages/ResearchPage'
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
             <Route path="/" element={<BacktestPage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/results/:jobId" element={<ResultsPage />} />
+            <Route path="/research" element={<ResearchPage />} />
           </Routes>
         </main>
       </div>

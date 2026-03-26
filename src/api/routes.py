@@ -369,6 +369,7 @@ async def get_backtest_results(job_id: str):
         symbol=job.symbol,
         strategy=job.strategy,
         parameters=job.parameters,
+        initial_capital=job.initial_capital,
         metrics=metrics,
         trades=trades,
         equity_curve=equity_curve,
@@ -407,24 +408,61 @@ async def list_strategies():
     ]
 
 
-@router.get("/jobs", response_model=List[JobSummary], tags=["Jobs"])
+@router.get("/jobs", tags=["Jobs"])
 async def list_jobs():
     """
-    List all backtest jobs (most recent first).
+    List all backtest and research jobs from the database (most recent first).
+    Each entry includes a job_type field: "backtest" or "research".
     """
-    jobs = job_manager.get_all_jobs()
-    return [
-        JobSummary(
-            job_id=job.job_id,
-            status=job.status,
-            symbol=job.symbol,
-            strategy=job.strategy,
-            created_at=job.created_at,
-            completed_at=job.completed_at,
-            total_return=job.result.get("metrics", {}).get("total_return") if job.result else None,
+    db = SessionLocal()
+    try:
+        backtest_rows = (
+            db.query(models.BacktestRun)
+            .order_by(models.BacktestRun.created_at.desc())
+            .all()
         )
-        for job in jobs
-    ]
+        research_rows = (
+            db.query(models.ResearchRun)
+            .order_by(models.ResearchRun.created_at.desc())
+            .all()
+        )
+
+        jobs = []
+
+        for r in backtest_rows:
+            jobs.append({
+                "job_id": r.job_id,
+                "status": r.status,
+                "symbol": r.symbol,
+                "strategy": r.strategy,
+                "created_at": r.created_at,
+                "completed_at": r.completed_at,
+                "total_return": r.performance.total_return if r.performance else None,
+                "job_type": "backtest",
+            })
+
+        for r in research_rows:
+            combo_count = sum(
+                1
+                for sw in (r.short_windows or [])
+                for lw in (r.long_windows or [])
+                if sw < lw
+            )
+            jobs.append({
+                "job_id": r.job_id,
+                "status": r.status,
+                "symbol": r.symbol,
+                "strategy": f"Param Sweep ({combo_count} combos)",
+                "created_at": r.created_at,
+                "completed_at": r.completed_at,
+                "total_return": r.best_sharpe_ratio,
+                "job_type": "research",
+            })
+    finally:
+        db.close()
+
+    jobs.sort(key=lambda j: j["created_at"] or datetime.min, reverse=True)
+    return jobs
 
 
 @router.get("/stream/{job_id}", tags=["Backtest"])
