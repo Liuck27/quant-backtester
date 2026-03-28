@@ -1,5 +1,4 @@
 import pandas as pd
-from collections import deque
 from datetime import datetime
 from typing import Optional, List
 from src.events import MarketEvent

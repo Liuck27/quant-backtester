@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List
-from collections import deque
 from src.events import MarketEvent, SignalEvent
 
 

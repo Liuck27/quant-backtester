@@ -14,8 +14,6 @@ dependencies = [
     "pytest",
     "ipykernel",
     "yfinance",
-    "matplotlib",
-    "seaborn",
     "fastapi",
     "uvicorn[standard]",
     "pydantic",
