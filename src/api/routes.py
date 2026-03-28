@@ -454,17 +454,27 @@ async def list_jobs(x_session_id: Optional[str] = Header(default=None)):
             })
 
         for r in research_rows:
-            combo_count = sum(
-                1
-                for sw in (r.short_windows or [])
-                for lw in (r.long_windows or [])
-                if sw < lw
-            )
+            strat = r.strategy or "ma_crossover"
+            if strat == "rsi":
+                combo_count = (
+                    len(r.rsi_periods or []) *
+                    len(r.oversold_levels or []) *
+                    len(r.overbought_levels or [])
+                )
+                strategy_label = f"Research: RSI ({combo_count} combos)"
+            else:
+                combo_count = sum(
+                    1
+                    for sw in (r.short_windows or [])
+                    for lw in (r.long_windows or [])
+                    if sw < lw
+                )
+                strategy_label = f"Research: MA Crossover ({combo_count} combos)"
             jobs.append({
                 "job_id": r.job_id,
                 "status": r.status,
                 "symbol": r.symbol,
-                "strategy": f"Param Sweep ({combo_count} combos)",
+                "strategy": strategy_label,
                 "created_at": r.created_at,
                 "completed_at": r.completed_at,
                 "total_return": r.best_sharpe_ratio,

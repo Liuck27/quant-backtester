@@ -4,6 +4,7 @@ const navItems = [
   { to: '/', icon: 'history_toggle_off', label: 'Backtest' },
   { to: '/research', icon: 'grid_view', label: 'Research' },
   { to: '/history', icon: 'manage_history', label: 'History' },
+  { to: '/about', icon: 'info', label: 'About' },
 ]
 
 export default function Sidebar() {
@@ -13,7 +14,7 @@ export default function Sidebar() {
     <aside className="bg-surface-container-low h-screen w-64 fixed left-0 top-0 overflow-y-auto flex flex-col py-8 px-4 z-50">
       <div className="mb-10 px-2">
         <h1 className="text-xl font-bold tracking-tight text-white font-headline">QuantBacktester</h1>
-        <p className="text-[10px] uppercase tracking-widest text-primary/60 font-semibold">Institutional Grade</p>
+        <p className="text-[10px] uppercase tracking-widest text-primary/60 font-semibold">Backtesting Engine</p>
       </div>
 
       <nav className="flex-1 space-y-1">

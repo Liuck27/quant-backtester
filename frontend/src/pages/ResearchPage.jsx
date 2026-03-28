@@ -22,6 +22,13 @@ function parseWindows(str) {
     .filter((n) => !isNaN(n) && n > 0)
 }
 
+function parseFloats(str) {
+  return str
+    .split(',')
+    .map((s) => parseFloat(s.trim()))
+    .filter((n) => !isNaN(n) && n > 0)
+}
+
 export default function ResearchPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -37,6 +44,10 @@ export default function ResearchPage() {
   const [commissionRate, setCommissionRate] = useState(0.1)
   const [slippageRate, setSlippageRate]     = useState(0.05)
   const [riskPerTrade, setRiskPerTrade]     = useState(2.0)
+  const [researchStrategy, setResearchStrategy] = useState('ma_crossover')
+  const [rsiPeriodInput, setRsiPeriodInput]       = useState('10, 14, 21')
+  const [oversoldInput, setOversoldInput]         = useState('25, 30, 35')
+  const [overboughtInput, setOverboughtInput]     = useState('65, 70, 75')
 
   // ---- Run state ----
   const [phase, setPhase]           = useState('idle') // 'idle' | 'running' | 'done' | 'error'
@@ -55,6 +66,7 @@ export default function ResearchPage() {
     getResearchJob(jobId)
       .then((data) => {
         if (data.status === 'completed') {
+          setResearchStrategy(data.strategy ?? 'ma_crossover')
           setResults(data.results ?? [])
           resultsRef.current = data.results ?? []
           setBestEquity(data.best_equity_curve ?? [])
@@ -74,10 +86,13 @@ export default function ResearchPage() {
 
   const shortWindows = parseWindows(shortInput)
   const longWindows  = parseWindows(longInput)
-  const validCombos  = shortWindows.filter((sw) => longWindows.some((lw) => lw > sw)).length *
-                       longWindows.filter((lw) => shortWindows.some((sw) => sw < lw)).length
-  // More accurate count
-  const comboCount = shortWindows.reduce((acc, sw) => acc + longWindows.filter((lw) => lw > sw).length, 0)
+  const rsiPeriods      = parseWindows(rsiPeriodInput)
+  const oversoldLevels  = parseFloats(oversoldInput)
+  const overboughtLevels = parseFloats(overboughtInput)
+
+  const comboCount = researchStrategy === 'ma_crossover'
+    ? shortWindows.reduce((acc, sw) => acc + longWindows.filter((lw) => lw > sw).length, 0)
+    : rsiPeriods.length * oversoldLevels.length * overboughtLevels.length
 
   // ---- Heatmap lookup ----
   const heatmapLookup = results.reduce((acc, r) => {
@@ -111,8 +126,10 @@ export default function ResearchPage() {
         symbol: symbol.toUpperCase().trim(),
         start_date: startDate,
         end_date: endDate,
-        strategy: 'ma_crossover',
-        parameters: { short_window: best.short_window, long_window: best.long_window },
+        strategy: researchStrategy,
+        parameters: researchStrategy === 'ma_crossover'
+          ? { short_window: best.short_window, long_window: best.long_window }
+          : { rsi_period: best.rsi_period, oversold: best.oversold, overbought: best.overbought },
         initial_capital: Number(capital),
         commission_rate: Number(commissionRate) / 100,
         slippage_rate: Number(slippageRate) / 100,
@@ -123,7 +140,7 @@ export default function ResearchPage() {
         state: {
           live: true,
           symbol: symbol.toUpperCase().trim(),
-          strategy: 'ma_crossover',
+          strategy: researchStrategy,
           initialCapital: Number(capital),
         },
       })
@@ -145,17 +162,33 @@ export default function ResearchPage() {
     setPhase('running')
 
     try {
-      const { job_id } = await runResearch({
-        symbol: symbol.toUpperCase().trim(),
-        start_date: startDate,
-        end_date: endDate,
-        short_windows: shortWindows,
-        long_windows: longWindows,
-        initial_capital: Number(capital),
-        commission_rate: Number(commissionRate) / 100,
-        slippage_rate: Number(slippageRate) / 100,
-        risk_per_trade: Number(riskPerTrade) / 100,
-      })
+      const payload = researchStrategy === 'ma_crossover'
+        ? {
+            symbol: symbol.toUpperCase().trim(),
+            start_date: startDate,
+            end_date: endDate,
+            strategy: 'ma_crossover',
+            short_windows: shortWindows,
+            long_windows: longWindows,
+            initial_capital: Number(capital),
+            commission_rate: Number(commissionRate) / 100,
+            slippage_rate: Number(slippageRate) / 100,
+            risk_per_trade: Number(riskPerTrade) / 100,
+          }
+        : {
+            symbol: symbol.toUpperCase().trim(),
+            start_date: startDate,
+            end_date: endDate,
+            strategy: 'rsi',
+            rsi_periods: rsiPeriods,
+            oversold_levels: oversoldLevels,
+            overbought_levels: overboughtLevels,
+            initial_capital: Number(capital),
+            commission_rate: Number(commissionRate) / 100,
+            slippage_rate: Number(slippageRate) / 100,
+            risk_per_trade: Number(riskPerTrade) / 100,
+          }
+      const { job_id } = await runResearch(payload)
 
       const es = openResearchStream(job_id)
 
@@ -218,7 +251,7 @@ export default function ResearchPage() {
             Parameter Research
           </h2>
           <p className="text-sm text-outline">
-            Sweep MA crossover parameters and visualize performance across the entire parameter space.
+            Sweep strategy parameters and compare performance across the entire parameter space.
           </p>
         </div>
         {phase !== 'idle' && (
@@ -239,9 +272,21 @@ export default function ResearchPage() {
           <span>·</span>
           <span>{startDate} → {endDate}</span>
           <span>·</span>
-          <span>Fast: [{shortInput}]</span>
-          <span>·</span>
-          <span>Slow: [{longInput}]</span>
+          {researchStrategy === 'ma_crossover' ? (
+            <>
+              <span>Fast: [{shortInput}]</span>
+              <span>·</span>
+              <span>Slow: [{longInput}]</span>
+            </>
+          ) : (
+            <>
+              <span>Periods: [{rsiPeriodInput}]</span>
+              <span>·</span>
+              <span>Oversold: [{oversoldInput}]</span>
+              <span>·</span>
+              <span>Overbought: [{overboughtInput}]</span>
+            </>
+          )}
         </div>
       )}
 
@@ -267,35 +312,68 @@ export default function ResearchPage() {
             </div>
 
             <div className="pt-3 border-t border-outline-variant/10 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-outline uppercase tracking-wider">Strategy</label>
+                <select className={inputCls + ' appearance-none'} value={researchStrategy} onChange={(e) => setResearchStrategy(e.target.value)}>
+                  <option value="ma_crossover">Moving Average Crossover</option>
+                  <option value="rsi">RSI Mean-Reversion</option>
+                </select>
+              </div>
+
               <h4 className="text-xs font-bold text-white">Parameter Grid</h4>
 
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-outline uppercase tracking-wider">
-                  Fast Periods <span className="normal-case font-normal">(comma-separated)</span>
-                </label>
-                <input
-                  className={inputCls}
-                  type="text"
-                  value={shortInput}
-                  onChange={(e) => setShortInput(e.target.value)}
-                  placeholder="5, 10, 20, 30"
-                  required
-                />
-              </div>
+              {researchStrategy === 'ma_crossover' ? (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-outline uppercase tracking-wider">
+                      Fast Periods <span className="normal-case font-normal">(comma-separated)</span>
+                    </label>
+                    <input
+                      className={inputCls}
+                      type="text"
+                      value={shortInput}
+                      onChange={(e) => setShortInput(e.target.value)}
+                      placeholder="5, 10, 20, 30"
+                      required
+                    />
+                  </div>
 
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-outline uppercase tracking-wider">
-                  Slow Periods <span className="normal-case font-normal">(comma-separated)</span>
-                </label>
-                <input
-                  className={inputCls}
-                  type="text"
-                  value={longInput}
-                  onChange={(e) => setLongInput(e.target.value)}
-                  placeholder="40, 50, 60, 80, 100, 120"
-                  required
-                />
-              </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-outline uppercase tracking-wider">
+                      Slow Periods <span className="normal-case font-normal">(comma-separated)</span>
+                    </label>
+                    <input
+                      className={inputCls}
+                      type="text"
+                      value={longInput}
+                      onChange={(e) => setLongInput(e.target.value)}
+                      placeholder="40, 50, 60, 80, 100, 120"
+                      required
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-outline uppercase tracking-wider">
+                      RSI Periods <span className="normal-case font-normal">(comma-separated)</span>
+                    </label>
+                    <input className={inputCls} type="text" value={rsiPeriodInput} onChange={(e) => setRsiPeriodInput(e.target.value)} placeholder="10, 14, 21" required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-outline uppercase tracking-wider">
+                      Oversold Levels <span className="normal-case font-normal">(comma-separated)</span>
+                    </label>
+                    <input className={inputCls} type="text" value={oversoldInput} onChange={(e) => setOversoldInput(e.target.value)} placeholder="25, 30, 35" required />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-outline uppercase tracking-wider">
+                      Overbought Levels <span className="normal-case font-normal">(comma-separated)</span>
+                    </label>
+                    <input className={inputCls} type="text" value={overboughtInput} onChange={(e) => setOverboughtInput(e.target.value)} placeholder="65, 70, 75" required />
+                  </div>
+                </>
+              )}
 
               <div className="flex items-center justify-between text-xs text-outline">
                 <span>Valid combinations</span>
@@ -384,7 +462,7 @@ export default function ResearchPage() {
           )}
 
           {/* Heatmap */}
-          {results.length > 0 && (
+          {researchStrategy === 'ma_crossover' && results.length > 0 && (
             <div className="bg-surface-container-low rounded-xl p-6 overflow-x-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xs font-bold text-outline uppercase tracking-wider">Sharpe Ratio Heatmap</h3>
@@ -423,17 +501,30 @@ export default function ResearchPage() {
                 <span className="text-xs text-outline">{results.length} combinations</span>
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="bg-surface-container-lowest/50 text-[10px] uppercase tracking-[0.12em] text-outline font-bold">
-                      {[
+                {(() => {
+                  const columns = researchStrategy === 'ma_crossover'
+                    ? [
                         { key: 'short_window', label: 'Fast' },
                         { key: 'long_window',  label: 'Slow' },
                         { key: 'sharpe_ratio', label: 'Sharpe' },
                         { key: 'total_return', label: 'Return' },
                         { key: 'max_drawdown', label: 'Max DD' },
                         { key: 'trade_count',  label: 'Trades' },
-                      ].map(({ key, label }) => (
+                      ]
+                    : [
+                        { key: 'rsi_period',  label: 'Period' },
+                        { key: 'oversold',    label: 'Oversold' },
+                        { key: 'overbought',  label: 'Overbought' },
+                        { key: 'sharpe_ratio', label: 'Sharpe' },
+                        { key: 'total_return', label: 'Return' },
+                        { key: 'max_drawdown', label: 'Max DD' },
+                        { key: 'trade_count',  label: 'Trades' },
+                      ]
+                  return (
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-surface-container-lowest/50 text-[10px] uppercase tracking-[0.12em] text-outline font-bold">
+                      {columns.map(({ key, label }) => (
                         <th
                           key={key}
                           className="px-4 py-3 text-right first:text-left cursor-pointer hover:text-on-surface select-none"
@@ -446,31 +537,54 @@ export default function ResearchPage() {
                   </thead>
                   <tbody className="divide-y divide-outline-variant/5">
                     {sortedResults.slice(0, 10).map((r, i) => {
-                      const isBest = best && r.short_window === best.short_window && r.long_window === best.long_window
+                      const isBest = researchStrategy === 'ma_crossover'
+                        ? best && r.short_window === best.short_window && r.long_window === best.long_window
+                        : best && r.rsi_period === best.rsi_period && r.oversold === best.oversold && r.overbought === best.overbought
                       return (
                         <tr
                           key={i}
                           onClick={() => setSelectedRow(r)}
                           className={`transition-colors cursor-pointer ${isBest ? 'bg-primary/5' : 'hover:bg-surface-container-high'}`}
                         >
-                          <td className="px-4 py-3 text-sm font-semibold text-on-surface">{r.short_window}</td>
-                          <td className="px-4 py-3 text-sm text-right tabular-nums text-on-surface-variant">{r.long_window}</td>
-                          <td className={`px-4 py-3 text-sm text-right tabular-nums font-bold ${r.sharpe_ratio >= 0 ? 'text-secondary' : 'text-tertiary-container'}`}>
-                            {r.sharpe_ratio.toFixed(3)}
-                            {isBest && <span className="ml-1.5 text-[9px] font-bold text-primary uppercase tracking-wider">best</span>}
-                          </td>
-                          <td className={`px-4 py-3 text-sm text-right tabular-nums ${r.total_return >= 0 ? 'text-secondary' : 'text-tertiary-container'}`}>
-                            {r.total_return >= 0 ? '+' : ''}{r.total_return.toFixed(1)}%
-                          </td>
-                          <td className="px-4 py-3 text-sm text-right tabular-nums text-tertiary-container">
-                            {r.max_drawdown.toFixed(1)}%
-                          </td>
-                          <td className="px-4 py-3 text-sm text-right tabular-nums text-outline">{r.trade_count}</td>
+                          {columns.map(({ key }, ci) => {
+                            const val = r[key]
+                            if (key === 'sharpe_ratio') {
+                              return (
+                                <td key={key} className={`px-4 py-3 text-sm text-right tabular-nums font-bold ${val >= 0 ? 'text-secondary' : 'text-tertiary-container'}`}>
+                                  {val.toFixed(3)}
+                                  {isBest && <span className="ml-1.5 text-[9px] font-bold text-primary uppercase tracking-wider">best</span>}
+                                </td>
+                              )
+                            }
+                            if (key === 'total_return') {
+                              return (
+                                <td key={key} className={`px-4 py-3 text-sm text-right tabular-nums ${val >= 0 ? 'text-secondary' : 'text-tertiary-container'}`}>
+                                  {val >= 0 ? '+' : ''}{val.toFixed(1)}%
+                                </td>
+                              )
+                            }
+                            if (key === 'max_drawdown') {
+                              return (
+                                <td key={key} className="px-4 py-3 text-sm text-right tabular-nums text-tertiary-container">
+                                  {val.toFixed(1)}%
+                                </td>
+                              )
+                            }
+                            if (key === 'trade_count') {
+                              return <td key={key} className="px-4 py-3 text-sm text-right tabular-nums text-outline">{val}</td>
+                            }
+                            // Parameter columns (first col left-aligned, rest right-aligned)
+                            return ci === 0
+                              ? <td key={key} className="px-4 py-3 text-sm font-semibold text-on-surface">{val}</td>
+                              : <td key={key} className="px-4 py-3 text-sm text-right tabular-nums text-on-surface-variant">{val}</td>
+                          })}
                         </tr>
                       )
                     })}
                   </tbody>
                 </table>
+                  )
+                })()}
                 {sortedResults.length > 10 && (
                   <p className="text-center text-xs text-outline py-3">
                     Showing top 10 of {sortedResults.length} results
@@ -488,7 +602,10 @@ export default function ResearchPage() {
                   <h3 className="text-xs font-bold text-outline uppercase tracking-wider mb-1">Best Strategy Equity Curve</h3>
                   {best && (
                     <p className="text-sm text-on-surface-variant">
-                      Fast={best.short_window} / Slow={best.long_window} — Sharpe{' '}
+                      {researchStrategy === 'ma_crossover'
+                        ? `Fast=${best.short_window} / Slow=${best.long_window}`
+                        : `Period=${best.rsi_period} / OS=${best.oversold} / OB=${best.overbought}`}{' '}
+                      — Sharpe{' '}
                       <span className="text-secondary font-bold">{best.sharpe_ratio.toFixed(3)}</span>
                     </p>
                   )}

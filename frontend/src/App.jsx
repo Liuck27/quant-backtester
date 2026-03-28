@@ -5,6 +5,7 @@ import BacktestPage from './pages/BacktestPage'
 import HistoryPage from './pages/HistoryPage'
 import ResultsPage from './pages/ResultsPage'
 import ResearchPage from './pages/ResearchPage'
+import AboutPage from './pages/AboutPage'
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/results/:jobId" element={<ResultsPage />} />
             <Route path="/research" element={<ResearchPage />} />
+            <Route path="/about" element={<AboutPage />} />
           </Routes>
         </main>
       </div>

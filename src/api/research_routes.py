@@ -37,8 +37,12 @@ class ResearchRequest(BaseModel):
     symbol: str
     start_date: str
     end_date: str
+    strategy: str = "ma_crossover"
     short_windows: List[int] = [5, 10, 20, 30]
     long_windows: List[int] = [40, 50, 60, 80, 100, 120]
+    rsi_periods: List[int] = [10, 14, 21]
+    oversold_levels: List[float] = [25.0, 30.0, 35.0]
+    overbought_levels: List[float] = [65.0, 70.0, 75.0]
     initial_capital: float = 100000.0
     commission_rate: float = 0.001
     slippage_rate: float = 0.0005
@@ -62,6 +66,10 @@ class ResearchJob:
     commission_rate: float
     slippage_rate: float
     risk_per_trade: float
+    strategy: str = "ma_crossover"
+    rsi_periods: List[int] = field(default_factory=list)
+    oversold_levels: List[float] = field(default_factory=list)
+    overbought_levels: List[float] = field(default_factory=list)
     status: JobStatus = JobStatus.PENDING
     created_at: datetime = field(default_factory=datetime.now)
     completed_at: Optional[datetime] = None
@@ -124,10 +132,73 @@ def _save_research_to_db(
 # ============================================================
 
 
+def _run_single_backtest(data_path, job, strategy_instance, DataHandler, Portfolio, BacktestEngine, FillEvent,
+                         create_equity_curve, calculate_sharpe_ratio, calculate_drawdown, calculate_total_return):
+    """Helper: run one backtest and return (total_return, sharpe_ratio, max_drawdown, fills)."""
+    data_handler = DataHandler(data_path, job.symbol)
+    portfolio = Portfolio(
+        initial_capital=job.initial_capital,
+        commission_rate=job.commission_rate,
+        risk_per_trade=job.risk_per_trade,
+    )
+    engine = BacktestEngine(
+        data_handler=data_handler,
+        strategy=strategy_instance,
+        portfolio=portfolio,
+        slippage_rate=job.slippage_rate,
+    )
+    engine.run()
+
+    equity_curve = create_equity_curve(portfolio.history)
+    total_return = 0.0
+    sharpe_ratio = 0.0
+    max_drawdown = 0.0
+
+    if not equity_curve.empty:
+        total_return = calculate_total_return(equity_curve) * 100
+        raw_sharpe = calculate_sharpe_ratio(equity_curve)
+        sharpe_ratio = float(raw_sharpe) if raw_sharpe is not None else 0.0
+        dd = calculate_drawdown(equity_curve)
+        max_drawdown = float(dd.min()) * 100 if len(dd) > 0 else 0.0
+
+    fills = [e for e in engine.processed_events if isinstance(e, FillEvent)]
+    return total_return, sharpe_ratio, max_drawdown, fills, portfolio, engine
+
+
+def _build_equity_and_fills(portfolio, engine, FillEvent):
+    """Serialize equity curve and fills from a completed engine run."""
+    best_equity_curve = [
+        {
+            "time": (
+                h["datetime"].isoformat()
+                if hasattr(h["datetime"], "isoformat")
+                else str(h["datetime"])
+            ),
+            "equity": h["equity"],
+            "cash": h["cash"],
+            "price": h.get("price"),
+        }
+        for h in portfolio.history
+    ]
+    best_fills = [
+        {
+            "time": (
+                e.time.isoformat()
+                if hasattr(e.time, "isoformat")
+                else str(e.time)
+            ),
+            "direction": e.direction,
+        }
+        for e in engine.processed_events
+        if isinstance(e, FillEvent)
+    ]
+    return best_equity_curve, best_fills
+
+
 def _execute_research(job: ResearchJob):
     from src.data_fetcher import DataFetcher
     from src.data_handler import DataHandler
-    from src.strategy import MovingAverageCrossStrategy
+    from src.strategy import MovingAverageCrossStrategy, RSIStrategy
     from src.portfolio import Portfolio
     from src.engine import BacktestEngine
     from src.performance import (
@@ -138,125 +209,123 @@ def _execute_research(job: ResearchJob):
     )
     from src.events import FillEvent
 
+    helpers = (DataHandler, Portfolio, BacktestEngine, FillEvent,
+               create_equity_curve, calculate_sharpe_ratio, calculate_drawdown, calculate_total_return)
+
     try:
         # 1. Fetch price data once — reused for every combination
         fetcher = DataFetcher()
         data_path = fetcher.get_data(job.symbol, job.start_date, job.end_date)
 
-        # 2. Build valid combinations (must have short < long)
-        combinations = [
-            (sw, lw)
-            for sw in job.short_windows
-            for lw in job.long_windows
-            if sw < lw
-        ]
-        job.total = len(combinations)
-        job.event_queue.put({"type": "start", "total": job.total})
-
         all_results: List[Dict[str, Any]] = []
 
-        for i, (sw, lw) in enumerate(combinations):
-            data_handler = DataHandler(data_path, job.symbol)
-            portfolio = Portfolio(
-                initial_capital=job.initial_capital,
-                commission_rate=job.commission_rate,
-                risk_per_trade=job.risk_per_trade,
-            )
-            strategy = MovingAverageCrossStrategy(short_window=sw, long_window=lw)
-            engine = BacktestEngine(
-                data_handler=data_handler,
-                strategy=strategy,
-                portfolio=portfolio,
-                slippage_rate=job.slippage_rate,
-            )
-            engine.run()
-
-            equity_curve = create_equity_curve(portfolio.history)
-
-            total_return = 0.0
-            sharpe_ratio = 0.0
-            max_drawdown = 0.0
-
-            if not equity_curve.empty:
-                total_return = calculate_total_return(equity_curve) * 100
-                raw_sharpe = calculate_sharpe_ratio(equity_curve)
-                sharpe_ratio = float(raw_sharpe) if raw_sharpe is not None else 0.0
-                dd = calculate_drawdown(equity_curve)
-                max_drawdown = float(dd.min()) * 100 if len(dd) > 0 else 0.0
-
-            fills = [e for e in engine.processed_events if isinstance(e, FillEvent)]
-
-            result: Dict[str, Any] = {
-                "short_window": sw,
-                "long_window": lw,
-                "total_return": round(total_return, 2),
-                "sharpe_ratio": round(sharpe_ratio, 3),
-                "max_drawdown": round(max_drawdown, 2),
-                "trade_count": len(fills),
-            }
-            all_results.append(result)
-            job.results.append(result)
-            job.progress = i + 1
-
-            job.event_queue.put(
-                {
-                    "type": "progress",
-                    "done": i + 1,
-                    "total": job.total,
-                    "result": result,
-                }
-            )
-
-        # 3. Re-run best strategy to capture full equity curve for the chart
-        best_equity_curve: List[Dict[str, Any]] = []
-        best_fills: List[Dict[str, Any]] = []
-
-        if all_results:
-            best = max(all_results, key=lambda r: r["sharpe_ratio"])
-
-            data_handler = DataHandler(data_path, job.symbol)
-            portfolio = Portfolio(
-                initial_capital=job.initial_capital,
-                commission_rate=job.commission_rate,
-                risk_per_trade=job.risk_per_trade,
-            )
-            strategy = MovingAverageCrossStrategy(
-                short_window=best["short_window"],
-                long_window=best["long_window"],
-            )
-            engine = BacktestEngine(
-                data_handler=data_handler,
-                strategy=strategy,
-                portfolio=portfolio,
-                slippage_rate=job.slippage_rate,
-            )
-            engine.run()
-
-            best_equity_curve = [
-                {
-                    "time": (
-                        h["datetime"].isoformat()
-                        if hasattr(h["datetime"], "isoformat")
-                        else str(h["datetime"])
-                    ),
-                    "equity": h["equity"],
-                    "cash": h["cash"],
-                    "price": h.get("price"),
-                }
-                for h in portfolio.history
+        if job.strategy == "rsi":
+            # ---- RSI parameter sweep ----
+            combinations = [
+                (p, ov, ob)
+                for p in job.rsi_periods
+                for ov in job.oversold_levels
+                for ob in job.overbought_levels
             ]
-            best_fills = [
-                {
-                    "time": (
-                        e.time.isoformat()
-                        if hasattr(e.time, "isoformat")
-                        else str(e.time)
-                    ),
-                    "direction": e.direction,
+            job.total = len(combinations)
+            job.event_queue.put({"type": "start", "total": job.total})
+
+            for i, (p, ov, ob) in enumerate(combinations):
+                strategy_instance = RSIStrategy(rsi_period=p, oversold=ov, overbought=ob)
+                total_return, sharpe_ratio, max_drawdown, fills, _, _ = _run_single_backtest(
+                    data_path, job, strategy_instance, *helpers
+                )
+
+                result: Dict[str, Any] = {
+                    "rsi_period": p,
+                    "oversold": ov,
+                    "overbought": ob,
+                    "total_return": round(total_return, 2),
+                    "sharpe_ratio": round(sharpe_ratio, 3),
+                    "max_drawdown": round(max_drawdown, 2),
+                    "trade_count": len(fills),
                 }
-                for e in engine.processed_events
-                if isinstance(e, FillEvent)
+                all_results.append(result)
+                job.results.append(result)
+                job.progress = i + 1
+
+                job.event_queue.put(
+                    {
+                        "type": "progress",
+                        "done": i + 1,
+                        "total": job.total,
+                        "result": result,
+                    }
+                )
+
+            # Re-run best RSI params to capture full equity curve
+            best_equity_curve: List[Dict[str, Any]] = []
+            best_fills: List[Dict[str, Any]] = []
+
+            if all_results:
+                best = max(all_results, key=lambda r: r["sharpe_ratio"])
+                strategy_instance = RSIStrategy(
+                    rsi_period=best["rsi_period"],
+                    oversold=best["oversold"],
+                    overbought=best["overbought"],
+                )
+                _, _, _, _, portfolio, engine = _run_single_backtest(
+                    data_path, job, strategy_instance, *helpers
+                )
+                best_equity_curve, best_fills = _build_equity_and_fills(portfolio, engine, FillEvent)
+
+        else:
+            # ---- MA Crossover parameter sweep (default) ----
+            combinations = [
+                (sw, lw)
+                for sw in job.short_windows
+                for lw in job.long_windows
+                if sw < lw
             ]
+            job.total = len(combinations)
+            job.event_queue.put({"type": "start", "total": job.total})
+
+            for i, (sw, lw) in enumerate(combinations):
+                strategy_instance = MovingAverageCrossStrategy(short_window=sw, long_window=lw)
+                total_return, sharpe_ratio, max_drawdown, fills, _, _ = _run_single_backtest(
+                    data_path, job, strategy_instance, *helpers
+                )
+
+                result: Dict[str, Any] = {
+                    "short_window": sw,
+                    "long_window": lw,
+                    "total_return": round(total_return, 2),
+                    "sharpe_ratio": round(sharpe_ratio, 3),
+                    "max_drawdown": round(max_drawdown, 2),
+                    "trade_count": len(fills),
+                }
+                all_results.append(result)
+                job.results.append(result)
+                job.progress = i + 1
+
+                job.event_queue.put(
+                    {
+                        "type": "progress",
+                        "done": i + 1,
+                        "total": job.total,
+                        "result": result,
+                    }
+                )
+
+            # Re-run best MA params to capture full equity curve
+            best_equity_curve = []
+            best_fills = []
+
+            if all_results:
+                best = max(all_results, key=lambda r: r["sharpe_ratio"])
+                strategy_instance = MovingAverageCrossStrategy(
+                    short_window=best["short_window"],
+                    long_window=best["long_window"],
+                )
+                _, _, _, _, portfolio, engine = _run_single_backtest(
+                    data_path, job, strategy_instance, *helpers
+                )
+                best_equity_curve, best_fills = _build_equity_and_fills(portfolio, engine, FillEvent)
 
         job.best_equity_curve = best_equity_curve
         job.best_fills = best_fills
@@ -294,7 +363,9 @@ async def run_research(
     x_session_id: Optional[str] = Header(default=None),
 ):
     """
-    Start a parameter sweep over MA crossover short/long window combinations.
+    Start a parameter sweep over strategy parameter combinations.
+    Supports MA crossover (short_window × long_window) and RSI mean-reversion
+    (rsi_period × oversold × overbought) strategies.
     Returns a job_id — connect to /research/stream/{job_id} for live progress.
     """
     try:
@@ -305,8 +376,15 @@ async def run_research(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-    if not request.short_windows or not request.long_windows:
-        raise HTTPException(status_code=400, detail="short_windows and long_windows must not be empty")
+    if request.strategy == "rsi":
+        if not request.rsi_periods or not request.oversold_levels or not request.overbought_levels:
+            raise HTTPException(
+                status_code=400,
+                detail="rsi_periods, oversold_levels, and overbought_levels must not be empty",
+            )
+    else:
+        if not request.short_windows or not request.long_windows:
+            raise HTTPException(status_code=400, detail="short_windows and long_windows must not be empty")
 
     job_id = str(uuid.uuid4())
     job = ResearchJob(
@@ -316,6 +394,10 @@ async def run_research(
         end_date=request.end_date,
         short_windows=sorted(set(request.short_windows)),
         long_windows=sorted(set(request.long_windows)),
+        strategy=request.strategy,
+        rsi_periods=sorted(set(request.rsi_periods)),
+        oversold_levels=sorted(set(request.oversold_levels)),
+        overbought_levels=sorted(set(request.overbought_levels)),
         initial_capital=request.initial_capital,
         commission_rate=request.commission_rate,
         slippage_rate=request.slippage_rate,
@@ -334,6 +416,10 @@ async def run_research(
             created_at=datetime.utcnow(),
             short_windows=job.short_windows,
             long_windows=job.long_windows,
+            strategy=job.strategy,
+            rsi_periods=job.rsi_periods,
+            oversold_levels=job.oversold_levels,
+            overbought_levels=job.overbought_levels,
             initial_capital=job.initial_capital,
             commission_rate=job.commission_rate,
             slippage_rate=job.slippage_rate,
@@ -402,6 +488,7 @@ async def get_research(job_id: str):
             "job_id": job.job_id,
             "status": job.status,
             "symbol": job.symbol,
+            "strategy": job.strategy,
             "short_windows": job.short_windows,
             "long_windows": job.long_windows,
             "progress": job.progress,
@@ -430,6 +517,7 @@ async def get_research(job_id: str):
             "job_id": db_run.job_id,
             "status": db_run.status,
             "symbol": db_run.symbol,
+            "strategy": db_run.strategy or "ma_crossover",
             "short_windows": db_run.short_windows,
             "long_windows": db_run.long_windows,
             "progress": combo_count,

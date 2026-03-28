@@ -9,6 +9,13 @@ const statusColors = {
   FAILED:    { bg: 'bg-error-container/20', text: 'text-error', dot: 'bg-error' },
 }
 
+const STRATEGY_LABELS = {
+  ma_crossover: 'MA Crossover',
+  rsi: 'RSI Mean-Reversion',
+  ml_signal: 'ML Signal',
+}
+const fmtStrategy = (s) => s ? (STRATEGY_LABELS[s] ?? s) : '—'
+
 const fmtDate = (s) => {
   if (!s) return '—'
   const d = new Date(s)
@@ -134,7 +141,7 @@ export default function HistoryPage() {
                   </div>
                   <div>
                     <p className="text-gray-500 mb-1 uppercase tracking-widest text-[10px]">Strategy</p>
-                    <p className="text-sm font-medium text-on-surface">{job.strategy?.replace('_', ' ') ?? '—'}</p>
+                    <p className="text-sm font-medium text-on-surface">{fmtStrategy(job.strategy)}</p>
                   </div>
                   <div>
                     <p className="text-gray-500 mb-1 uppercase tracking-widest text-[10px]">Date</p>
