@@ -8,8 +8,8 @@ import json
 import logging
 import queue
 from datetime import datetime
-from typing import List
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Header
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 
@@ -246,7 +246,11 @@ def save_results_to_db(
 
 
 @router.post("/backtest/run", response_model=JobStatusResponse, tags=["Backtest"])
-async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTasks):
+async def run_backtest(
+    request: BacktestRequest,
+    background_tasks: BackgroundTasks,
+    x_session_id: Optional[str] = Header(default=None),
+):
     """
     Start a new backtest job.
 
@@ -276,6 +280,7 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
             parameters=job.parameters,
             initial_capital=job.initial_capital,
             status="running",
+            session_id=x_session_id,
         )
         db.add(db_run)
         db.commit()
@@ -409,23 +414,23 @@ async def list_strategies():
 
 
 @router.get("/jobs", tags=["Jobs"])
-async def list_jobs():
+async def list_jobs(x_session_id: Optional[str] = Header(default=None)):
     """
     List all backtest and research jobs from the database (most recent first).
     Each entry includes a job_type field: "backtest" or "research".
+    When X-Session-ID header is present, only jobs for that session are returned.
     """
     db = SessionLocal()
     try:
-        backtest_rows = (
-            db.query(models.BacktestRun)
-            .order_by(models.BacktestRun.created_at.desc())
-            .all()
-        )
-        research_rows = (
-            db.query(models.ResearchRun)
-            .order_by(models.ResearchRun.created_at.desc())
-            .all()
-        )
+        backtest_query = db.query(models.BacktestRun)
+        if x_session_id:
+            backtest_query = backtest_query.filter(models.BacktestRun.session_id == x_session_id)
+        backtest_rows = backtest_query.order_by(models.BacktestRun.created_at.desc()).all()
+
+        research_query = db.query(models.ResearchRun)
+        if x_session_id:
+            research_query = research_query.filter(models.ResearchRun.session_id == x_session_id)
+        research_rows = research_query.order_by(models.ResearchRun.created_at.desc()).all()
 
         jobs = []
 

@@ -13,12 +13,13 @@ data/*.csv
 !data/.gitkeep
 *.log
 /.claude
-CLAUDE.md
 notes.txt
 ROADMAP.md
+.agents
 
 # Frontend
 frontend/node_modules/
 frontend/dist/
 frontend/.env.local
 frontend/.env.production
+skills-lock.json

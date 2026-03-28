@@ -1,11 +1,22 @@
 const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
+function getSessionId() {
+  const KEY = 'qb_session_id'
+  let id = localStorage.getItem(KEY)
+  if (!id) {
+    id = crypto.randomUUID()
+    localStorage.setItem(KEY, id)
+  }
+  return id
+}
+
 async function req(path, opts = {}, timeoutMs = 10000) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const headers = { 'X-Session-ID': getSessionId(), ...(opts.headers ?? {}) }
   let res
   try {
-    res = await fetch(`${BASE}${path}`, { ...opts, signal: controller.signal })
+    res = await fetch(`${BASE}${path}`, { ...opts, headers, signal: controller.signal })
   } catch (err) {
     if (err.name === 'AbortError') throw new Error('Request timed out')
     throw err

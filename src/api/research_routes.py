@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, date
 from typing import Dict, List, Optional, Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -289,7 +289,10 @@ def _execute_research(job: ResearchJob):
 
 
 @research_router.post("/research/run", tags=["Research"])
-async def run_research(request: ResearchRequest):
+async def run_research(
+    request: ResearchRequest,
+    x_session_id: Optional[str] = Header(default=None),
+):
     """
     Start a parameter sweep over MA crossover short/long window combinations.
     Returns a job_id — connect to /research/stream/{job_id} for live progress.
@@ -335,6 +338,7 @@ async def run_research(request: ResearchRequest):
             commission_rate=job.commission_rate,
             slippage_rate=job.slippage_rate,
             risk_per_trade=job.risk_per_trade,
+            session_id=x_session_id,
         )
         db.add(db_run)
         db.commit()

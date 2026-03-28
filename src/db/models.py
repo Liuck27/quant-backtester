@@ -18,6 +18,7 @@ class BacktestRun(Base):
     status = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
+    session_id = Column(String, nullable=True, index=True)
 
     # Relationships
     trades = relationship(
@@ -84,3 +85,4 @@ class ResearchRun(Base):
     best_equity_curve = Column(JSON, nullable=True)
     best_fills        = Column(JSON, nullable=True)
     error             = Column(String, nullable=True)
+    session_id        = Column(String, nullable=True, index=True)
