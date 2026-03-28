@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { runBacktest } from '../api/client'
 
 const MA_DEFAULTS = { short_window: 10, long_window: 50 }
+const RSI_DEFAULTS = { rsi_period: 14, oversold: 30, overbought: 70 }
 const ML_DEFAULTS = {
   model_type: 'random_forest',
   lookback_window: 252,
@@ -24,6 +25,7 @@ export default function BacktestPage() {
   const [capital, setCapital] = useState(100000)
   const [maParams, setMaParams] = useState(MA_DEFAULTS)
   const [mlParams, setMlParams] = useState(ML_DEFAULTS)
+  const [rsiParams, setRsiParams] = useState(RSI_DEFAULTS)
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [commissionRate, setCommissionRate] = useState(0.1)   // displayed as %
   const [slippageRate, setSlippageRate] = useState(0.05)      // displayed as %
@@ -39,6 +41,8 @@ export default function BacktestPage() {
     try {
       const params = strategy === 'ma_crossover'
         ? { short_window: Number(maParams.short_window), long_window: Number(maParams.long_window) }
+        : strategy === 'rsi'
+        ? { rsi_period: Number(rsiParams.rsi_period), oversold: Number(rsiParams.oversold), overbought: Number(rsiParams.overbought) }
         : {
             model_type: mlParams.model_type,
             lookback_window: Number(mlParams.lookback_window),
@@ -98,7 +102,7 @@ export default function BacktestPage() {
             <label className="text-[11px] font-bold text-outline uppercase tracking-wider">Strategy</label>
             <select className={inputCls + ' appearance-none'} value={strategy} onChange={(e) => setStrategy(e.target.value)}>
               <option value="ma_crossover">Moving Average Crossover</option>
-              <option value="ml_signal">ML Signal (scikit-learn)</option>
+              <option value="rsi">RSI Mean-Reversion</option>
             </select>
           </div>
 
@@ -111,18 +115,9 @@ export default function BacktestPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-xs text-outline">Model Type</label>
-                  <select className={inputCls + ' appearance-none text-xs'} value={mlParams.model_type} onChange={(e) => setMlParams((p) => ({ ...p, model_type: e.target.value }))}>
-                    <option value="random_forest">Random Forest</option>
-                    <option value="gradient_boosting">Gradient Boosting</option>
-                    <option value="logistic">Logistic Regression</option>
-                  </select>
-                </div>
-                <ParamRow label="Lookback Window" value={mlParams.lookback_window} onChange={(v) => setMlParams((p) => ({ ...p, lookback_window: v }))} />
-                <ParamRow label="Retrain Every" value={mlParams.retrain_every} onChange={(v) => setMlParams((p) => ({ ...p, retrain_every: v }))} />
-                <ParamRow label="Long Threshold" value={mlParams.long_threshold} onChange={(v) => setMlParams((p) => ({ ...p, long_threshold: v }))} step={0.05} />
-                <ParamRow label="Exit Threshold" value={mlParams.exit_threshold} onChange={(v) => setMlParams((p) => ({ ...p, exit_threshold: v }))} step={0.05} />
+                <ParamRow label="RSI Period" value={rsiParams.rsi_period} onChange={(v) => setRsiParams((p) => ({ ...p, rsi_period: v }))} />
+                <ParamRow label="Oversold" value={rsiParams.oversold} onChange={(v) => setRsiParams((p) => ({ ...p, oversold: v }))} step={1} />
+                <ParamRow label="Overbought" value={rsiParams.overbought} onChange={(v) => setRsiParams((p) => ({ ...p, overbought: v }))} step={1} />
               </div>
             )}
             <ParamRow label="Initial Capital" value={capital} onChange={setCapital} className="mt-4" inputClassName="w-24" />

@@ -23,6 +23,7 @@ class StrategyType(str, Enum):
 
     MA_CROSSOVER = "ma_crossover"
     ML_SIGNAL = "ml_signal"
+    RSI = "rsi"
 
 
 # ============================================================

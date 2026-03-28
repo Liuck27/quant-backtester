@@ -99,6 +99,13 @@ def _run_backtest(job: BacktestJob, progress_callback) -> dict:
             long_threshold=job.parameters.get("long_threshold", 0.6),
             exit_threshold=job.parameters.get("exit_threshold", 0.4),
         )
+    elif job.strategy == StrategyType.RSI.value:
+        from src.strategy import RSIStrategy
+        strategy = RSIStrategy(
+            rsi_period=job.parameters.get("rsi_period", 14),
+            oversold=job.parameters.get("oversold", 30.0),
+            overbought=job.parameters.get("overbought", 70.0),
+        )
     else:
         raise ValueError(f"Unknown strategy: {job.strategy}")
 

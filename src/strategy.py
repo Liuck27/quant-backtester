@@ -103,3 +103,53 @@ class MovingAverageCrossStrategy(Strategy):
 
         return None
 
+
+class RSIStrategy(Strategy):
+    """
+    RSI Mean-Reversion Strategy.
+
+    Logic:
+    - LONG when RSI drops below the oversold threshold (e.g. 30).
+    - EXIT when RSI rises above the overbought threshold (e.g. 70).
+    """
+
+    def __init__(self, rsi_period: int = 14, oversold: float = 30.0, overbought: float = 70.0):
+        self.rsi_period = rsi_period
+        self.oversold = oversold
+        self.overbought = overbought
+        self.prices: List[float] = []
+        self.bought = False
+
+    def _calc_rsi(self) -> Optional[float]:
+        if len(self.prices) < self.rsi_period + 1:
+            return None
+        deltas = [self.prices[i] - self.prices[i - 1] for i in range(-self.rsi_period, 0)]
+        gains = sum(d for d in deltas if d > 0) / self.rsi_period
+        losses = sum(-d for d in deltas if d < 0) / self.rsi_period
+        if losses == 0:
+            return 100.0
+        rs = gains / losses
+        return 100.0 - (100.0 / (1.0 + rs))
+
+    def calculate_signals(self, event: MarketEvent) -> Optional[SignalEvent]:
+        if not isinstance(event, MarketEvent):
+            return None
+        self.prices.append(event.price)
+        rsi = self._calc_rsi()
+        if rsi is None:
+            return None
+        signal_type = None
+        if rsi < self.oversold and not self.bought:
+            self.bought = True
+            signal_type = "LONG"
+        elif rsi > self.overbought and self.bought:
+            self.bought = False
+            signal_type = "EXIT"
+        if signal_type:
+            return SignalEvent(
+                time=event.time,
+                symbol=event.symbol,
+                signal_type=signal_type,
+                strength=1.0,
+            )
+        return None
