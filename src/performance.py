@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, List
+from collections import deque
+from typing import Dict, List, Optional
 
 
 def create_equity_curve(portfolio_history: List[Dict]) -> pd.DataFrame:
@@ -55,6 +56,47 @@ def calculate_sharpe_ratio(
 
     sharpe = (returns.mean() - risk_free_rate) / returns.std()
     return sharpe * np.sqrt(periods)
+
+
+def calculate_win_rate(trades: List[Dict]) -> Optional[float]:
+    """
+    Calculates win rate by FIFO-matching BUY/SELL pairs.
+    A win is a SELL that closes at a price above average cost basis.
+    Returns None if there are no closed trades (no matched pairs).
+    """
+    buy_queue: deque = deque()  # (price, qty)
+    wins = 0
+    total_closed = 0
+
+    for t in trades:
+        if t["direction"] == "BUY":
+            buy_queue.append((t["price"], t["quantity"]))
+        elif t["direction"] == "SELL":
+            remaining = t["quantity"]
+            sell_price = t["price"]
+            cost_basis = 0.0
+            matched_qty = 0
+
+            while remaining > 0 and buy_queue:
+                buy_price, buy_qty = buy_queue[0]
+                take = min(remaining, buy_qty)
+                cost_basis += take * buy_price
+                matched_qty += take
+                remaining -= take
+                if take == buy_qty:
+                    buy_queue.popleft()
+                else:
+                    buy_queue[0] = (buy_price, buy_qty - take)
+
+            if matched_qty > 0:
+                avg_cost = cost_basis / matched_qty
+                if sell_price > avg_cost:
+                    wins += 1
+                total_closed += 1
+
+    if total_closed == 0:
+        return None
+    return (wins / total_closed) * 100
 
 
 def calculate_total_return(equity_curve: pd.DataFrame) -> float:

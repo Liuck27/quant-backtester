@@ -18,6 +18,7 @@ class BacktestRun(Base):
     status = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
+    session_id = Column(String, nullable=True, index=True)
 
     # Relationships
     trades = relationship(
@@ -57,5 +58,35 @@ class PerformanceResult(Base):
     sharpe_ratio = Column(Float, nullable=True)
     max_drawdown = Column(Float)  # as percentage
     final_equity = Column(Float)
+    equity_curve = Column(JSON, nullable=True)  # [{time, equity, cash}, ...]
+    fills = Column(JSON, nullable=True)          # [{time, direction}, ...]
 
     backtest_run = relationship("BacktestRun", back_populates="performance")
+
+
+class ResearchRun(Base):
+    __tablename__ = "research_runs"
+
+    id              = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    job_id          = Column(String, unique=True, index=True)
+    symbol          = Column(String, index=True)
+    status          = Column(String)              # "running" | "completed" | "failed"
+    created_at      = Column(DateTime, default=datetime.utcnow)
+    completed_at    = Column(DateTime, nullable=True)
+    short_windows   = Column(JSON)
+    long_windows    = Column(JSON)
+    strategy          = Column(String, default="ma_crossover", nullable=True)
+    rsi_periods       = Column(JSON, nullable=True)
+    oversold_levels   = Column(JSON, nullable=True)
+    overbought_levels = Column(JSON, nullable=True)
+    initial_capital = Column(Float)
+    commission_rate = Column(Float)
+    slippage_rate   = Column(Float)
+    risk_per_trade  = Column(Float)
+    # Populated on completion
+    all_results       = Column(JSON, nullable=True)
+    best_sharpe_ratio = Column(Float, nullable=True)
+    best_equity_curve = Column(JSON, nullable=True)
+    best_fills        = Column(JSON, nullable=True)
+    error             = Column(String, nullable=True)
+    session_id        = Column(String, nullable=True, index=True)

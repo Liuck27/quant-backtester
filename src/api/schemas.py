@@ -3,10 +3,10 @@ Pydantic schemas for API request/response validation.
 Provides type-safe data structures for backtest configuration and results.
 """
 
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, Dict, List, Any
 from enum import Enum
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class JobStatus(str, Enum):
@@ -22,6 +22,8 @@ class StrategyType(str, Enum):
     """Available trading strategies."""
 
     MA_CROSSOVER = "ma_crossover"
+    ML_SIGNAL = "ml_signal"
+    RSI = "rsi"
 
 
 # ============================================================
@@ -39,7 +41,23 @@ class BacktestRequest(BaseModel):
     parameters: Dict[str, Any] = Field(
         default_factory=dict, description="Strategy-specific parameters"
     )
-    initial_capital: float = Field(default=100000.0, description="Starting capital")
+    initial_capital: float = Field(default=100000.0, gt=0, description="Starting capital")
+    commission_rate: float = Field(default=0.001, ge=0, le=0.1, description="Commission as a fraction per trade (e.g. 0.001 = 0.1%)")
+    slippage_rate: float = Field(default=0.0005, ge=0, le=0.05, description="Slippage as a fraction per trade (e.g. 0.0005 = 0.05%)")
+    risk_per_trade: float = Field(default=0.02, gt=0, le=1.0, description="Fraction of equity risked per trade (e.g. 0.02 = 2%)")
+
+    @model_validator(mode="after")
+    def validate_dates(self) -> "BacktestRequest":
+        try:
+            start = date.fromisoformat(self.start_date)
+            end = date.fromisoformat(self.end_date)
+        except ValueError as e:
+            raise ValueError(f"Invalid date format. Use YYYY-MM-DD. Detail: {e}")
+        if start >= end:
+            raise ValueError(
+                f"start_date ({self.start_date}) must be before end_date ({self.end_date})"
+            )
+        return self
 
     model_config = {
         "json_schema_extra": {
@@ -92,8 +110,11 @@ class BacktestResult(BaseModel):
     symbol: str
     strategy: str
     parameters: Dict[str, Any]
+    initial_capital: Optional[float] = None
     metrics: Optional[PerformanceMetrics] = None
     trades: Optional[List[TradeRecord]] = None
+    equity_curve: Optional[List[Dict[str, Any]]] = None
+    fills: Optional[List[Dict[str, Any]]] = None
     error: Optional[str] = None
     created_at: datetime
     completed_at: Optional[datetime] = None
@@ -105,6 +126,18 @@ class JobStatusResponse(BaseModel):
     job_id: str
     status: JobStatus
     progress: Optional[str] = None
+
+
+class JobSummary(BaseModel):
+    """Summary of a backtest job for the history list."""
+
+    job_id: str
+    status: JobStatus
+    symbol: str
+    strategy: str
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    total_return: Optional[float] = None
 
 
 class StrategyInfo(BaseModel):

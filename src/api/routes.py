@@ -3,16 +3,21 @@ FastAPI routes for the backtesting API.
 Provides endpoints for running backtests, checking status, and retrieving results.
 """
 
+import asyncio
+import json
 import logging
+import queue
 from datetime import datetime
-from typing import List
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Header
+from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 
 from src.api.schemas import (
     BacktestRequest,
     BacktestResult,
     JobStatusResponse,
+    JobSummary,
     StrategyInfo,
     StrategyType,
     PerformanceMetrics,
@@ -40,9 +45,27 @@ def execute_backtest(job: BacktestJob) -> dict:
     This function runs in a background thread and uses the core
     backtesting components to run the simulation.
     """
+    logger.info(f"Starting backtest execution for job {job.job_id}")
+
+    def progress_callback(event_data: dict):
+        job.event_queue.put(event_data)
+        if event_data.get("type") == "equity":
+            job.partial_equity_curve.append(event_data)
+        elif event_data.get("type") == "fill":
+            job.partial_fills.append(event_data)
+
+    try:
+        return _run_backtest(job, progress_callback)
+    except Exception as e:
+        job.event_queue.put({"type": "error", "message": str(e)})
+        raise
+
+
+def _run_backtest(job: BacktestJob, progress_callback) -> dict:
     from src.data_fetcher import DataFetcher
     from src.data_handler import DataHandler
     from src.strategy import MovingAverageCrossStrategy
+    from src.ml_strategy import MLSignalStrategy
     from src.portfolio import Portfolio
     from src.engine import BacktestEngine
     from src.performance import (
@@ -50,10 +73,9 @@ def execute_backtest(job: BacktestJob) -> dict:
         calculate_drawdown,
         calculate_sharpe_ratio,
         calculate_total_return,
+        calculate_win_rate,
     )
     from src.events import FillEvent
-
-    logger.info(f"Starting backtest execution for job {job.job_id}")
 
     # 1. Fetch data
     fetcher = DataFetcher()
@@ -69,14 +91,37 @@ def execute_backtest(job: BacktestJob) -> dict:
         strategy = MovingAverageCrossStrategy(
             short_window=short_window, long_window=long_window
         )
+    elif job.strategy == StrategyType.ML_SIGNAL.value:
+        strategy = MLSignalStrategy(
+            model_type=job.parameters.get("model_type", "random_forest"),
+            lookback_window=job.parameters.get("lookback_window", 252),
+            retrain_every=job.parameters.get("retrain_every", 20),
+            long_threshold=job.parameters.get("long_threshold", 0.6),
+            exit_threshold=job.parameters.get("exit_threshold", 0.4),
+        )
+    elif job.strategy == StrategyType.RSI.value:
+        from src.strategy import RSIStrategy
+        strategy = RSIStrategy(
+            rsi_period=job.parameters.get("rsi_period", 14),
+            oversold=job.parameters.get("oversold", 30.0),
+            overbought=job.parameters.get("overbought", 70.0),
+        )
     else:
         raise ValueError(f"Unknown strategy: {job.strategy}")
 
-    portfolio = Portfolio(initial_capital=job.initial_capital)
+    portfolio = Portfolio(
+        initial_capital=job.initial_capital,
+        commission_rate=job.commission_rate,
+        risk_per_trade=job.risk_per_trade,
+    )
 
     # 4. Run backtest
     engine = BacktestEngine(
-        data_handler=data_handler, strategy=strategy, portfolio=portfolio
+        data_handler=data_handler,
+        strategy=strategy,
+        portfolio=portfolio,
+        progress_callback=progress_callback,
+        slippage_rate=job.slippage_rate,
     )
     engine.run()
 
@@ -117,26 +162,37 @@ def execute_backtest(job: BacktestJob) -> dict:
                 }
             )
 
-    save_results_to_db(
-        job,
-        metrics,
-        trades,
-        portfolio.history[-1]["equity"] if portfolio.history else job.initial_capital,
-    )
+    metrics["win_rate"] = calculate_win_rate(trades)
+
+    final_equity = portfolio.history[-1]["equity"] if portfolio.history else job.initial_capital
+
+    equity_curve_data = [
+        {
+            "time": h["datetime"].isoformat() if hasattr(h["datetime"], "isoformat") else str(h["datetime"]),
+            "equity": h["equity"],
+            "cash": h["cash"],
+            "price": h.get("price"),
+        }
+        for h in portfolio.history
+    ]
+    fills_data = [{"time": t["timestamp"], "direction": t["direction"]} for t in trades]
+
+    save_results_to_db(job, metrics, trades, final_equity, equity_curve_data, fills_data)
+
+    progress_callback({"type": "done", "metrics": metrics, "final_equity": final_equity})
 
     return {
         "metrics": metrics,
         "trades": trades,
-        "final_equity": (
-            portfolio.history[-1]["equity"]
-            if portfolio.history
-            else job.initial_capital
-        ),
+        "final_equity": final_equity,
+        "equity_curve": equity_curve_data,
+        "fills": fills_data,
     }
 
 
 def save_results_to_db(
-    job: BacktestJob, metrics: dict, trades_data: list, final_equity: float
+    job: BacktestJob, metrics: dict, trades_data: list, final_equity: float,
+    equity_curve_data: list = None, fills_data: list = None,
 ):
     """
     Helper to persist backtest results to PostgreSQL.
@@ -164,6 +220,8 @@ def save_results_to_db(
                 ),
                 max_drawdown=float(metrics.get("max_drawdown", 0.0)),
                 final_equity=float(final_equity),
+                equity_curve=equity_curve_data,
+                fills=fills_data,
             )
             db.add(perf)
 
@@ -195,7 +253,11 @@ def save_results_to_db(
 
 
 @router.post("/backtest/run", response_model=JobStatusResponse, tags=["Backtest"])
-async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTasks):
+async def run_backtest(
+    request: BacktestRequest,
+    background_tasks: BackgroundTasks,
+    x_session_id: Optional[str] = Header(default=None),
+):
     """
     Start a new backtest job.
 
@@ -210,6 +272,9 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
         strategy=request.strategy.value,
         parameters=request.parameters,
         initial_capital=request.initial_capital,
+        commission_rate=request.commission_rate,
+        slippage_rate=request.slippage_rate,
+        risk_per_trade=request.risk_per_trade,
     )
 
     # Persist initial record to DB
@@ -222,6 +287,7 @@ async def run_backtest(request: BacktestRequest, background_tasks: BackgroundTas
             parameters=job.parameters,
             initial_capital=job.initial_capital,
             status="running",
+            session_id=x_session_id,
         )
         db.add(db_run)
         db.commit()
@@ -306,14 +372,20 @@ async def get_backtest_results(job_id: str):
             for t in job.result.get("trades", [])
         ]
 
+    equity_curve = job.result.get("equity_curve") if job.result else None
+    fills = job.result.get("fills") if job.result else None
+
     return BacktestResult(
         job_id=job.job_id,
         status=job.status,
         symbol=job.symbol,
         strategy=job.strategy,
         parameters=job.parameters,
+        initial_capital=job.initial_capital,
         metrics=metrics,
         trades=trades,
+        equity_curve=equity_curve,
+        fills=fills,
         error=job.error,
         created_at=job.created_at,
         completed_at=job.completed_at,
@@ -333,24 +405,133 @@ async def list_strategies():
                 "short_window": "Number of periods for the short moving average (default: 10)",
                 "long_window": "Number of periods for the long moving average (default: 50)",
             },
-        )
+        ),
+        StrategyInfo(
+            name="ml_signal",
+            description="Machine Learning Signal Strategy. Trains a classifier on historical price features to predict next-bar direction. Generates LONG signals when predicted up-probability exceeds the long threshold, and EXIT signals when it falls below the exit threshold.",
+            parameters={
+                "model_type": "Classifier to use: 'random_forest' (default), 'gradient_boosting', or 'logistic'",
+                "lookback_window": "Number of past bars used for training (default: 252, ~1 trading year)",
+                "retrain_every": "Retrain the model every N bars (default: 20)",
+                "long_threshold": "Predicted up-probability above which a LONG signal fires (default: 0.6)",
+                "exit_threshold": "Predicted up-probability below which an EXIT signal fires (default: 0.4)",
+            },
+        ),
     ]
 
 
-@router.get("/jobs", response_model=List[JobStatusResponse], tags=["Jobs"])
-async def list_jobs():
+@router.get("/jobs", tags=["Jobs"])
+async def list_jobs(x_session_id: Optional[str] = Header(default=None)):
     """
-    List all backtest jobs (most recent first).
+    List all backtest and research jobs from the database (most recent first).
+    Each entry includes a job_type field: "backtest" or "research".
+    When X-Session-ID header is present, only jobs for that session are returned.
     """
-    jobs = job_manager.get_all_jobs()
-    return [
-        JobStatusResponse(
-            job_id=job.job_id,
-            status=job.status,
-            progress=f"{job.symbol} - {job.strategy}",
-        )
-        for job in jobs
-    ]
+    db = SessionLocal()
+    try:
+        backtest_query = db.query(models.BacktestRun)
+        if x_session_id:
+            backtest_query = backtest_query.filter(models.BacktestRun.session_id == x_session_id)
+        backtest_rows = backtest_query.order_by(models.BacktestRun.created_at.desc()).all()
+
+        research_query = db.query(models.ResearchRun)
+        if x_session_id:
+            research_query = research_query.filter(models.ResearchRun.session_id == x_session_id)
+        research_rows = research_query.order_by(models.ResearchRun.created_at.desc()).all()
+
+        jobs = []
+
+        for r in backtest_rows:
+            jobs.append({
+                "job_id": r.job_id,
+                "status": r.status,
+                "symbol": r.symbol,
+                "strategy": r.strategy,
+                "created_at": r.created_at,
+                "completed_at": r.completed_at,
+                "total_return": r.performance.total_return if r.performance else None,
+                "job_type": "backtest",
+            })
+
+        for r in research_rows:
+            strat = r.strategy or "ma_crossover"
+            if strat == "rsi":
+                combo_count = (
+                    len(r.rsi_periods or []) *
+                    len(r.oversold_levels or []) *
+                    len(r.overbought_levels or [])
+                )
+                strategy_label = f"Research: RSI ({combo_count} combos)"
+            else:
+                combo_count = sum(
+                    1
+                    for sw in (r.short_windows or [])
+                    for lw in (r.long_windows or [])
+                    if sw < lw
+                )
+                strategy_label = f"Research: MA Crossover ({combo_count} combos)"
+            jobs.append({
+                "job_id": r.job_id,
+                "status": r.status,
+                "symbol": r.symbol,
+                "strategy": strategy_label,
+                "created_at": r.created_at,
+                "completed_at": r.completed_at,
+                "total_return": r.best_sharpe_ratio,
+                "job_type": "research",
+            })
+    finally:
+        db.close()
+
+    jobs.sort(key=lambda j: j["created_at"] or datetime.min, reverse=True)
+    return jobs
+
+
+@router.get("/stream/{job_id}", tags=["Backtest"])
+async def stream_backtest(job_id: str):
+    """
+    Stream live backtest progress via Server-Sent Events (SSE).
+
+    Connect with EventSource('/stream/{job_id}') in the browser.
+    Emits events of type: 'equity' (per bar), 'fill' (per trade), 'done', 'error'.
+    """
+    job = job_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    async def event_generator():
+        # On (re)connect, replay accumulated history so the client always sees
+        # the full curve from bar 1, not just events from the moment of connection.
+        if job.partial_equity_curve or job.partial_fills:
+            snapshot = {
+                "type": "snapshot",
+                "equity_curve": job.partial_equity_curve,
+                "fills": job.partial_fills,
+            }
+            yield f"data: {json.dumps(snapshot)}\n\n"
+
+        while True:
+            try:
+                event = job.event_queue.get_nowait()
+            except queue.Empty:
+                if job.status.value == "completed":
+                    break
+                await asyncio.sleep(0.05)
+                continue
+
+            yield f"data: {json.dumps(event)}\n\n"
+
+            if event.get("type") in ("done", "error"):
+                break
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/db/results/{job_id}", tags=["Database"])

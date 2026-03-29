@@ -4,6 +4,7 @@ Configures the app with CORS, exception handlers, and routes.
 """
 
 import logging
+import os
 from datetime import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
@@ -11,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.api.routes import router
+from src.api.research_routes import research_router
 from src.api.schemas import HealthResponse
 from src.api.jobs import job_manager
 from src.db.database import SessionLocal
@@ -61,10 +63,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS configuration
+# CORS configuration — set CORS_ORIGINS env var in production (comma-separated)
+_cors_env = os.getenv("CORS_ORIGINS", "*")
+_cors_origins = ["*"] if _cors_env == "*" else [o.strip() for o in _cors_env.split(",")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify allowed origins
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -131,3 +135,4 @@ async def health_check():
 
 # Include routes
 app.include_router(router)
+app.include_router(research_router)

@@ -51,6 +51,49 @@ class TestPortfolioUnit:
         assert order.direction == "BUY"
 
 
+    def test_create_order_short(self):
+        """SHORT signal should produce a SELL order sized by risk."""
+        p = Portfolio(10000.0)
+        p.latest_prices["AAPL"] = 100.0
+
+        signal = SignalEvent(time=datetime.now(), symbol="AAPL", signal_type="SHORT")
+        order = p.create_order(signal)
+
+        assert order is not None
+        assert order.direction == "SELL"
+        assert order.quantity == 2  # 10000 * 0.02 / 100 = 2
+
+    def test_exit_covers_short_position(self):
+        """EXIT signal should buy-to-cover when holding is negative (short)."""
+        p = Portfolio(10000.0)
+        p.latest_prices["AAPL"] = 100.0
+        # Simulate an open short: we sold 5 shares we didn't own
+        p.holdings["AAPL"] = -5
+
+        signal = SignalEvent(time=datetime.now(), symbol="AAPL", signal_type="EXIT")
+        order = p.create_order(signal)
+
+        assert order is not None
+        assert order.direction == "BUY"
+        assert order.quantity == 5
+
+    def test_equity_warns_on_missing_price(self, caplog):
+        """Equity calculation should warn when a held symbol has no latest price."""
+        import logging
+
+        p = Portfolio(10000.0)
+        p.holdings["AAPL"] = 10  # holding with no price in latest_prices
+
+        with caplog.at_level(logging.WARNING, logger="src.portfolio"):
+            signal = SignalEvent(time=datetime.now(), symbol="AAPL", signal_type="LONG")
+            p.latest_prices["AAPL"] = 100.0  # price for the LONG sizing itself
+            # Introduce a second holding with no price to trigger the warning
+            p.holdings["MSFT"] = 5
+            p.create_order(signal)
+
+        assert any("MSFT" in record.message for record in caplog.records)
+
+
 class TestPortfolioIntegration:
     def test_full_flow(self):
         """

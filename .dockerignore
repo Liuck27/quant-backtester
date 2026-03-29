@@ -1,17 +1,31 @@
+# Git
 .git
 .gitignore
-.venv
-.vscode
-.pytest_cache
-__pycache__
-build/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
 *.pyd
-*.so
-tests/
-notebooks/
+*.egg-info/
+.pytest_cache/
+build/
+
+# Frontend (not needed in backend Docker image)
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.production
+
+# IDE & tooling
+.vscode/
+.claude/
+*.log
+notes.txt
+
+# Data cache
 data/*.csv
-logs/*.log
-task.md
-implementation_plan.md
-walkthrough.md
-*.egg-info
+
+# Notebooks
+notebooks/
