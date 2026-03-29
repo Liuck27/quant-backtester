@@ -1,6 +1,6 @@
 # Event-Driven Quantitative Backtesting Framework
 
-A high-performance algorithmic trading simulation engine built with Python and C++. This framework demonstrates institutional-grade architectures for backtesting, featuring realistic execution modeling, walk-forward validation, a scalable REST API, and a modern React frontend.
+A professional-grade algorithmic trading simulation engine built with Python. This framework demonstrates institutional-style architectures for backtesting, featuring realistic execution modeling, walk-forward validation, a scalable REST API, SSE-streamed live updates, and a modern React frontend.
 
 ---
 
@@ -21,33 +21,72 @@ graph LR
 ```
 
 ### Core Components
-- **`BacktestEngine`**: Central event loop managing a FIFO queue of market, signal, order, and fill events.
-- **`Strategy` Layer**: Support for stateful Python strategies and high-performance C++ extensions.
-- **`Portfolio`**: Real-time position tracking with risk-based sizing and equity delta management.
-- **`Execution`**: Simulated exchange with configurable slippage and commission models.
-- **`DataHandler`**: Yahoo Finance integration with local CSV caching for rapid iteration.
 
-### Frontend
-- **React + Vite + Tailwind CSS** single-page application in `frontend/`.
-- Dark editorial design system ("QuantVault") with Manrope + Inter typography and Material Symbols icons.
-- Three main views: **Backtest Configuration & Live Monitor**, **Job History**, and **Detailed Results Analysis**.
-- Live equity chart streaming via SSE (Server-Sent Events) during backtest execution.
-- API URL configurable via `VITE_API_URL` environment variable for flexible deployment.
+- **`BacktestEngine`** (`src/engine.py`): Central event loop managing a FIFO queue of market, signal, order, and fill events. Slippage is applied inline during order processing — no separate execution handler.
+- **`Strategy`** (`src/strategy.py`, `src/ml_strategy.py`): Pluggable strategy interface. Four implementations built-in (see below).
+- **`Portfolio`** (`src/portfolio.py`): Real-time position tracking with risk-based sizing (2% equity per trade by default) and equity snapshot history.
+- **`DataHandler`** (`src/data_handler.py`): Yahoo Finance integration via `yfinance` with local CSV caching for rapid iteration.
+- **`Performance`** (`src/performance.py`): Sharpe ratio, max drawdown, total return, and equity curve construction from portfolio history.
+- **`WalkForwardAnalyzer`** (`src/walk_forward.py`): Rolls in-sample/out-of-sample windows, grid-searches parameters on in-sample data (optimising Sharpe), then evaluates on out-of-sample.
+
+### Strategies
+
+| Strategy | Key Parameters | Notes |
+|---|---|---|
+| `buy_and_hold` | — | Baseline: buy once, hold forever |
+| `moving_average_cross` | `short_window`, `long_window` | Golden/death cross signals |
+| `rsi` | `rsi_period`, `oversold`, `overbought` | Mean-reversion on RSI extremes |
+| `ml_signal` | `model_type`, `lookback_window`, `retrain_every`, `long_threshold` | Trains a scikit-learn classifier on OHLCV features; supports `random_forest`, `gradient_boosting`, `logistic` |
+
+### REST API (`src/api/`)
+
+FastAPI application. Backtests run asynchronously via `ThreadPoolExecutor` managed by `JobManager`. Job lifecycle: `PENDING → RUNNING → COMPLETED/FAILED`.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/backtest/run` | Submit a backtest job |
+| `GET` | `/backtest/{job_id}` | Poll job status |
+| `GET` | `/results/{job_id}` | Retrieve completed results |
+| `GET` | `/stream/{job_id}` | SSE live equity stream during execution |
+| `POST` | `/research/run` | Submit a parameter sweep job |
+| `GET` | `/research/{job_id}` | Get sweep results |
+| `GET` | `/research/stream/{job_id}` | SSE live progress for sweep |
+| `GET` | `/jobs` | List all jobs (session-scoped) |
+| `GET` | `/strategies` | List available strategies and parameters |
+| `GET` | `/health` | Health check with DB connectivity |
+
+### Frontend (`frontend/`)
+
+React 18 + Vite + Tailwind CSS SPA with the "QuantVault" design system.
+
+| Page | Route | Description |
+|---|---|---|
+| Backtest | `/` | Configuration form + live equity chart via SSE |
+| History | `/history` | Job listing with status filters and auto-refresh |
+| Results | `/results/:jobId` | Metrics, equity curve, and full trade log |
+| Research | `/research` | Parameter sweep configuration and heatmap results |
+| About | `/about` | Framework overview and usage guide |
+
+### Database (`src/db/`)
+
+SQLAlchemy models: `BacktestRun`, `Trade`, `PerformanceResult`. Results are persisted to PostgreSQL immediately after job completion. Migrations managed with Alembic.
 
 ---
 
 ## Project Evolution
 
-This project was built incrementally, evolving from a simple event loop into a production-ready system.
+Built incrementally from a minimal event loop to a production-deployed system.
 
-*   **Phase 1: Foundation**: Core event loop, FIFO queue, and basic market data ingestion.
-*   **Phase 2: Strategy & Portfolio**: Stateful strategy support and equity curve tracking.
-*   **Phase 3: Realism**: Implementation of slippage, commissions, risk-adjusted position sizing, Walk-Forward Validation and real data fetching.
-*   **Phase 4: Optimization**: Migration of compute-intensive strategy logic (MA Crossover) to C++ using `pybind11`.
-*   **Phase 5: Professional API**: FastAPI service with async job management and status tracking.
-*   **Phase 6: Persistence**: PostgreSQL integration with SQLAlchemy and Alembic for historical storage.
-*   **Phase 7: Docker**: Containerized environment for easy deployment and scaling.
-*   **Phase 8: Frontend**: React SPA with live backtest streaming, job history, and detailed results analysis.
+- **Phase 1 — Foundation**: Core event loop, FIFO queue, and market data ingestion.
+- **Phase 2 — Strategy & Portfolio**: Stateful strategy support and equity curve tracking.
+- **Phase 3 — Realism**: Slippage, commissions, risk-adjusted position sizing, walk-forward validation, and real data fetching via Yahoo Finance.
+- **Phase 4 — Professional API**: FastAPI service with async job management, SSE streaming, and status tracking.
+- **Phase 5 — Persistence**: PostgreSQL integration with SQLAlchemy and Alembic.
+- **Phase 6 — Docker**: Containerized full-stack environment.
+- **Phase 7 — Frontend**: React SPA with live backtest streaming, job history, and detailed results analysis.
+- **Phase 8 — ML Strategies**: `MLSignalStrategy` with scikit-learn classifiers, rolling training windows, and anti-look-ahead guards.
+- **Phase 9 — Research Tools**: Parameter sweep engine with SSE streaming and results heatmap.
+- **Phase 10 — Deployment**: Live on Vercel (frontend) + Render (API) + Supabase (database).
 
 ---
 
@@ -55,83 +94,89 @@ This project was built incrementally, evolving from a simple event loop into a p
 
 ### Prerequisites
 - Docker & Docker Compose
-- Python 3.12+ (if running locally)
+- Python 3.9+ (if running locally)
 - Node.js 20+ (if running frontend locally)
-- C++ Compiler (for C++ extensions)
 
-### Execution Mode: Docker (Recommended)
-The easiest way to run the full stack (Frontend + API + Database + Monitoring) is using the containerized environment:
+### Docker (Recommended)
 
-1.  **Start the Stack**:
-    ```bash
-    docker-compose up -d --build
-    ```
-2.  **Verify Deployment**:
-    - **Frontend**: [http://localhost:5173](http://localhost:5173)
-    - **Health Check**: [http://localhost:8000/health](http://localhost:8000/health)
-    - **Interactive API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
-    - **Database Admin (Adminer)**: [http://localhost:8080](http://localhost:8080)
+Starts all four services: Frontend, API, PostgreSQL, and Adminer.
 
-### Development Mode: Local Setup
-To run the framework outside of Docker for development:
+```bash
+docker-compose up -d --build
+```
 
-1.  **Initialize Environment**:
-    ```bash
-    python -m venv .venv
-    .venv\Scripts\activate  # Windows
-    # source .venv/bin/activate  # Unix
-    ```
-2.  **Install Framework & C++ Extension**:
-    ```bash
-    pip install -e .
-    python setup.py build_ext --inplace
-    ```
-3.  **Start the Frontend**:
-    ```bash
-    cd frontend
-    npm install
-    npm run dev
-    ```
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:5173 |
+| API | http://localhost:8000 |
+| API Docs | http://localhost:8000/docs |
+| Adminer | http://localhost:8080 |
 
----
+### Local Development
 
-## What to Check
+```bash
+# Backend
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -e .
+uvicorn src.api.main:app --reload
 
-### 1. Frontend
-Open [http://localhost:5173](http://localhost:5173) to access the QuantVault dashboard where you can:
-- Configure and run backtests with live equity chart streaming
-- Browse job history with status filtering
-- View detailed results with trade logs and performance metrics
+# Frontend (separate terminal)
+cd frontend
+npm install
+npm run dev
+```
 
-### 2. Research Notebooks
-Explore the framework's capabilities through the interactive notebooks in `/notebooks`:
-- **`real_data_research.ipynb`**: Demonstrates the full quant workflow: Data Fetching -> Walk-Forward Validation -> Performance Analysis.
-- **`benchmark_cpp.ipynb`**: Compares the Python vs. C++ implementation, showcasing a ~3.2x speedup in signal calculation.
+### Database Migrations
 
-### 3. REST API & Job Management
-The system supports asynchronous backtest execution. You can submit jobs via the API and track their progress through the database-backed manager.
-- Submit a backtest: `POST /backtest/run`
-- Check results: `GET /results/{job_id}`
-
-### 4. Verification & Tests
-Ensure the integrity of the framework by running the comprehensive test suite:
-
-- **Unit & Integration Tests**:
-  ```bash
-  pytest tests/
-  ```
-- **End-to-End System Test** (Requires Docker/API running):
-  ```bash
-  python tests/test_end_to_end.py
-  ```
+```bash
+alembic upgrade head
+```
 
 ---
 
-## Technical Details
-- **Frontend**: React 18, Vite, Tailwind CSS, Recharts, React Router
-- **Backend**: FastAPI with SSE streaming
-- **Database**: PostgreSQL with SQLAlchemy & Alembic
-- **Optimization**: C++11 with `pybind11`
-- **Data**: Yahoo Finance API integration
-- **Containerization**: Docker Multi-stage builds
-- **Deployment Target**: Vercel (frontend) + Supabase (database) + separate backend host
+## Testing
+
+```bash
+# Unit and integration tests
+pytest tests/
+
+# End-to-end test (requires Docker stack running)
+python tests/test_end_to_end.py
+```
+
+---
+
+## Environment Variables
+
+| Variable | Service | Default | Description |
+|---|---|---|---|
+| `DATABASE_URL` | Backend | `postgresql://postgres:postgres@localhost:5432/quant_backtester` | PostgreSQL connection string |
+| `CORS_ORIGINS` | Backend | `*` | Comma-separated allowed origins — set to your frontend URL in production |
+| `VITE_API_URL` | Frontend | `http://localhost:8000` | Backend API base URL |
+
+---
+
+## Deployment
+
+Live deployment at zero cost:
+
+| Layer | Service | Notes |
+|---|---|---|
+| Frontend | [Vercel](https://vercel.com) Hobby tier | Auto-deploys from `main`; root directory set to `frontend/` |
+| Backend | [Render](https://render.com) Free tier | Dockerized; auto-deploys from `main` |
+| Database | [Supabase](https://supabase.com) Free tier | PostgreSQL; connect via Transaction Pooler (port 6543) to avoid IPv6 issues on Render |
+
+---
+
+## Technical Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.11, FastAPI, uvicorn |
+| Data | pandas, numpy, yfinance |
+| ML | scikit-learn |
+| Database | PostgreSQL 15, SQLAlchemy, Alembic, psycopg2 |
+| Frontend | React 18, Vite, Tailwind CSS, Recharts, React Router |
+| Streaming | Server-Sent Events (SSE) |
+| Containerisation | Docker, Docker Compose |
