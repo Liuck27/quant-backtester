@@ -2,6 +2,8 @@
 
 A professional-grade algorithmic trading simulation engine built with Python. This framework demonstrates institutional-style architectures for backtesting, featuring realistic execution modeling, walk-forward validation, a scalable REST API, SSE-streamed live updates, and a modern React frontend.
 
+[![Demo Video](https://img.youtube.com/vi/qPb3tBL2f5Q/maxresdefault.jpg)](https://www.youtube.com/watch?v=qPb3tBL2f5Q)
+
 ---
 
 ## Architecture
